@@ -186,7 +186,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 }
 @page{size:A4 landscape;margin:8mm}
 
-.folha{page-break-after:always;break-after:page}
+.folha{page-break-after:always;break-after:page;height:auto}
 .folha:last-child{page-break-after:auto;break-after:auto}
 .folha h1{font:700 10pt/1.2 Arial;margin:0 0 1.5mm;padding-bottom:1mm;
           border-bottom:1.2pt solid #000;display:flex;gap:6px;align-items:baseline}
@@ -197,8 +197,13 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
           border:.4pt solid #000;text-transform:uppercase;position:static}
 .folha td{border:.4pt solid #000;padding:.8mm 1mm;vertical-align:top;
           white-space:pre-wrap;overflow-wrap:anywhere}
+/* 24 linhas por célula: MEDIDO, não escolhido. Com 26 dois pacientes cheios
+   estouravam a folha e saía página em branco; com 20 sobrava espaço à toa.
+   Com 24 a enfermaria de 13 cabe nas mesmas 5 folhas de quando o limite era
+   13 linhas — quase o dobro de texto por paciente, sem gastar papel a mais —
+   e nenhuma folha fica com menos de dois pacientes. */
 .folha td .cel{display:-webkit-box;-webkit-box-orient:vertical;
-               -webkit-line-clamp:13;line-clamp:13;overflow:hidden}
+               -webkit-line-clamp:24;line-clamp:24;overflow:hidden}
 .folha td.leito{font-weight:700;font-size:9pt;text-align:center}
 .folha .dih{background:none;color:#000}
 .folha .susp{text-decoration:line-through}
@@ -332,7 +337,6 @@ function vaiParaOPapel(chave, valorNumerico, valorTexto) {
 function nomeCurto(chave, porExtenso) {
   return ABREVIACAO[chave] || porExtenso || chave || "?";
 }
-const POR_FOLHA = 3;          // pacientes por folha A4 paisagem
 const CAMPOS_TEXTO = ["problemas", "caso", "exames", "hoje", "pendencias"];
 
 let dados = carregar();
@@ -602,49 +606,120 @@ function renderFolhas() {
   const alvo = document.getElementById("folhas");
   alvo.textContent = "";
   const lista = dados.pacientes;
-  const total = Math.max(1, Math.ceil(lista.length / POR_FOLHA));
   const agora = new Date();
   const carimbo = agora.toLocaleDateString("pt-BR") + " " +
     agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-  for (let f = 0; f < total; f++) {
+  if (!lista.length) {
     const folha = document.createElement("section");
     folha.className = "folha";
+    folha.append(cabecalhoDaFolha(agora, carimbo, 1, 1, 0));
+    const vazio = document.createElement("p");
+    vazio.textContent = "Nenhum paciente ativo.";
+    folha.appendChild(vazio);
+    alvo.appendChild(folha);
+    return;
+  }
 
-    const titulo = document.createElement("h1");
-    titulo.append(txt("PASSÔMETRO — " + document.getElementById("servico").textContent));
-    titulo.append(meta(agora.toLocaleDateString("pt-BR")));
-    titulo.append(meta("gerado " + carimbo));
-    titulo.append(meta(lista.length + " paciente(s)"));
-    const folio = document.createElement("span");
-    folio.className = "folio";
-    folio.textContent = "folha " + (f + 1) + " de " + total;
-    titulo.appendChild(folio);
-    folha.appendChild(titulo);
-
-    const tabela = document.createElement("table");
-    const cabecalho = document.createElement("thead");
-    const linha = document.createElement("tr");
-    [["Leito", "6%"], ["Paciente · DIH · medicações", "19%"], ["Problemas ativos", "13%"],
-     ["HPP · alergias · HMA", "16%"], ["Exames", "14%"],
-     ["Antimicrobianos", "11%"], ["Hoje", "12%"], ["Pendências", "9%"]]
-      .forEach(([nome, largura]) => {
-        const th = document.createElement("th");
-        th.textContent = nome; th.style.width = largura;
-        linha.appendChild(th);
-      });
-    cabecalho.appendChild(linha);
-    tabela.appendChild(cabecalho);
-
+  const folhas = paginarPorAltura(lista, agora, carimbo);
+  folhas.forEach((grupo, i) => {
+    const folha = document.createElement("section");
+    folha.className = "folha";
+    folha.append(cabecalhoDaFolha(agora, carimbo, i + 1, folhas.length, lista.length));
+    const tabela = tabelaDaFolha();
     const corpo = document.createElement("tbody");
-    lista.slice(f * POR_FOLHA, (f + 1) * POR_FOLHA).forEach(p => {
+    grupo.forEach(p => {
       corpo.appendChild(linhaImpressa(p));
       corpo.appendChild(linhaManuscrita(8));
     });
     tabela.appendChild(corpo);
     folha.appendChild(tabela);
     alvo.appendChild(folha);
-  }
+  });
+}
+
+/* Quantos pacientes cabem numa folha depende do quanto cada um tem escrito.
+   Contar 3 fixos cortava o paciente cheio e desperdiçava a folha do paciente
+   vazio. Aqui o navegador MEDE cada bloco antes de paginar: entram quantos
+   couberem, com o mínimo de dois — o bloco é limitado a meia folha, então
+   dois sempre cabem. */
+const PX_POR_MM = 96 / 25.4;
+const ALTURA_UTIL_MM = 194;   // A4 paisagem (210mm) menos 8mm de margem em cima e embaixo
+const MINIMO_POR_FOLHA = 2;
+
+function paginarPorAltura(lista, agora, carimbo) {
+  const medidor = document.createElement("div");
+  medidor.className = "passometro folha-a4";
+  medidor.style.cssText = "position:absolute;left:-99999px;top:0;width:281mm;visibility:hidden";
+  const folha = document.createElement("section");
+  folha.className = "folha";
+  folha.style.height = "auto";
+  const cabecalho = cabecalhoDaFolha(agora, carimbo, 1, 1, lista.length);
+  const tabela = tabelaDaFolha();
+  const corpo = document.createElement("tbody");
+  const pares = lista.map(p => {
+    const dados_ = linhaImpressa(p);
+    const manus = linhaManuscrita(8);
+    corpo.append(dados_, manus);
+    return [dados_, manus];
+  });
+  tabela.appendChild(corpo);
+  folha.append(cabecalho, tabela);
+  medidor.appendChild(folha);
+  document.body.appendChild(medidor);
+
+  const alturaCabecalho = cabecalho.getBoundingClientRect().height;
+  const alturaTitulos = tabela.querySelector("thead").getBoundingClientRect().height;
+  const alturas = pares.map(([a, b]) =>
+    a.getBoundingClientRect().height + b.getBoundingClientRect().height);
+  document.body.removeChild(medidor);
+
+  const orcamento = ALTURA_UTIL_MM * PX_POR_MM - alturaCabecalho - alturaTitulos;
+  const folhas = [];
+  let atual = [], gasto = 0;
+  lista.forEach((p, i) => {
+    const altura = alturas[i] || 0;
+    // Cabe? Entra. Não cabe, mas a folha ainda não tem o mínimo? Entra também,
+    // porque uma folha com um paciente só desperdiça papel.
+    if (atual.length && gasto + altura > orcamento && atual.length >= MINIMO_POR_FOLHA) {
+      folhas.push(atual);
+      atual = []; gasto = 0;
+    }
+    atual.push(p);
+    gasto += altura;
+  });
+  if (atual.length) folhas.push(atual);
+  return folhas;
+}
+
+function cabecalhoDaFolha(agora, carimbo, numero, total, pacientes) {
+  const titulo = document.createElement("h1");
+  titulo.append(txt("PASSÔMETRO — " + document.getElementById("servico").textContent));
+  titulo.append(meta(agora.toLocaleDateString("pt-BR")));
+  titulo.append(meta("gerado " + carimbo));
+  if (pacientes) titulo.append(meta(pacientes + " paciente(s)"));
+  const folio = document.createElement("span");
+  folio.className = "folio";
+  folio.textContent = "folha " + numero + " de " + total;
+  titulo.appendChild(folio);
+  return titulo;
+}
+
+function tabelaDaFolha() {
+  const tabela = document.createElement("table");
+  const cabecalho = document.createElement("thead");
+  const linha = document.createElement("tr");
+  [["Leito", "6%"], ["Paciente · DIH · medicações", "19%"], ["Problemas ativos", "13%"],
+   ["HPP · alergias · HMA", "16%"], ["Exames", "14%"],
+   ["Antimicrobianos", "11%"], ["Hoje", "12%"], ["Pendências", "9%"]]
+    .forEach(([nome, largura]) => {
+      const th = document.createElement("th");
+      th.textContent = nome; th.style.width = largura;
+      linha.appendChild(th);
+    });
+  cabecalho.appendChild(linha);
+  tabela.appendChild(cabecalho);
+  return tabela;
 }
 
 function linhaImpressa(p) {
