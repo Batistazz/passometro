@@ -376,7 +376,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
    que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
    minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
    olhando uma versao velha sem ter como saber. */
-const VERSAO = "2026-09-04-1753";
+const VERSAO = "2026-09-04-1828";
 
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
@@ -558,6 +558,7 @@ function removerPaciente(id) {
 /* Ordem natural de leito: 305/5 antes de 305/10, e 99 antes de 305. */
 function chaveLeito(leito) {
   return String(leito || "~").toUpperCase()
+    .replace(/[./\-]/g, "/")          // "307.4" e "307/4" são o mesmo quarto
     .replace(/\d+/g, n => n.padStart(6, "0"));
 }
 function ordenar() {
@@ -1080,7 +1081,9 @@ function abrirArquivo(evento) {
           !confirm("Isto substitui os " + dados.pacientes.length +
                    " paciente(s) que estão aqui. Continuar?")) return;
       dados = { pacientes: novos };
-      salvar(); render();
+      // Ordem de leito, nao a ordem em que o arquivo foi escrito: a lista e'
+      // a sequencia da visita.
+      ordenar();
       aviso(novos.length + " paciente(s) carregado(s) do arquivo.");
     } catch (erro) {
       aviso("Não consegui ler esse arquivo: " + erro.message);
@@ -1312,7 +1315,8 @@ function renderFicha() {
 
    A leitura e' tolerante e NAO adivinha: o que ela nao reconhecer vai inteiro
    para o nome, e a previa mostra o que entendeu de cada linha ANTES de criar. */
-const LEITO_NA_LINHA = /^\s*([0-9]{1,4}\s*[\/\-]\s*[0-9A-Za-z]{1,3}|[0-9]{1,4}[A-Za-z]?)\s*[-–:\t]?\s*/;
+/* A enfermaria escreve o leito de dois jeitos: "302/1" e "202.1". */
+const LEITO_NA_LINHA = /^\s*([0-9]{1,4}\s*[\/.\-]\s*[0-9A-Za-z]{1,3}|[0-9]{1,4}[A-Za-z]?)\s*[-–:\t]?\s*/;
 const IDADE_NA_LINHA = /(?:^|[\s,(])(\d{1,3})\s*(?:a|anos)\b/i;
 
 function lerLinhaDePaciente(bruto) {
@@ -1424,7 +1428,23 @@ function parecePainelDeExames(linha) {
 /* Devolve { destino, texto, secao } — texto é o que vai ser guardado, já sem
    o rótulo do prontuário. A prévia mostra exatamente este texto, para não
    haver nada acontecendo escondido. */
-function classificarLinha(bruto, secao, indice) {
+/* Palavras que sobram quando a idade sai da linha e que não são nome de
+   gente. Sem isto, "21 anos D3 iH" vira o paciente "anos". */
+const NAO_E_NOME = /^(?:anos?|ex|em|e|de|da|do|h[aá]|com|sem|no|na)$/i;
+
+function pareceCabecalho(linha) {
+  if (linha.length > 60) return false;         // cabeçalho de leito é curto
+  if (/[.]\s*$/.test(linha)) return false;      // frase termina em ponto
+  if (DOSE_NA_LINHA.test(linha)) return false;
+  const palavras = linha.split(/\s+/).filter(Boolean);
+  if (palavras.length > 8) return false;
+  const lido = lerLinhaDePaciente(linha);
+  if (!lido || !lido.nome) return false;
+  const pedacos = lido.nome.split(/\s+/).filter(Boolean);
+  return pedacos.some(x => x.length >= 3 && !NAO_E_NOME.test(x));
+}
+
+function classificarLinha(bruto, secao, indice, cabeSemNome) {
   const linha = bruto.trim();
   if (!linha) return null;
 
@@ -1443,9 +1463,11 @@ function classificarLinha(bruto, secao, indice) {
   if (FALA_DE_INTERNACAO.test(linha) && acharDataNoTexto(linha))
     return { destino: "internacao", texto: linha, secao: secao };
 
-  // Cabeçalho do paciente: só nas primeiras linhas, e só se der para ler
-  // leito ou idade. Sem isso, qualquer frase curta viraria "nome".
-  if (indice < 3 && !DOSE_NA_LINHA.test(linha)) {
+  // Cabeçalho do paciente. Aqui a régua é apertada de propósito: aplicar uma
+  // colagem lida errado REESCREVERIA o nome do paciente. Texto clínico de
+  // verdade passou por esta peneira — "EX TABAGISTA 20 ANOS/MAÇO E EX
+  // ETILISTA." tem idade e nome e mesmo assim não é cabeçalho de ninguém.
+  if (indice < 2 && cabeSemNome && pareceCabecalho(linha)) {
     const lido = lerLinhaDePaciente(linha);
     if (lido && lido.nome && (lido.idade || lido.leito))
       return { destino: "identificacao", texto: linha, secao: secao };
@@ -1457,10 +1479,11 @@ function classificarLinha(bruto, secao, indice) {
       return { destino: "atb", texto: linha, secao: secao };
     if (DOSE_NA_LINHA.test(linha))
       return { destino: "medicacao", texto: linha, secao: secao };
-    // Lista de diagnósticos: curta, separada por ; ou +, sem ponto final.
-    if (linha.length <= 90 && /[;+]/.test(linha) && !/\.\s*$/.test(linha))
-      return { destino: "problemas", texto: linha, secao: secao };
   }
+  // Diagnóstico NÃO é adivinhado pela pontuação. "PA; 160X100" e três
+  // pendências entravam como problema ativo por terem ponto e vírgula. O
+  // rótulo ("HD:", "Problemas:") continua mandando para lá, e o seletor
+  // continua à mão — o que saiu foi o palpite.
 
   /* Uma seção de prescrição ("Medicações:", "ATB:") termina sozinha quando a
      linha deixa de parecer item: sem dose, ou narrando. Sem isso, a evolução
@@ -1471,18 +1494,24 @@ function classificarLinha(bruto, secao, indice) {
   return { destino: secao || "hoje", texto: linha, secao: secao, solta: !secao };
 }
 
-function lerColagem(texto) {
+function lerColagem(texto, cabeSemNome) {
   const linhas = texto.split(/\r?\n/);
   const lidas = [];
   let secao = "";
   linhas.forEach(bruta => {
     const limpa = bruta.replace(/^[\s\-•*\u2022]+/, "").trim();
     if (!limpa) return;
-    const r = classificarLinha(limpa, secao, lidas.length);
+    const r = classificarLinha(limpa, secao, lidas.length, cabeSemNome);
     if (!r) return;
     if (r.fecha) secao = ""; else if (r.secao) secao = r.secao;
     lidas.push({ texto: r.texto, destino: r.destino, solta: !!r.solta, rotulo: !!r.rotulo });
   });
+  /* Colar uma evolução inteira manda tudo para HOJE — que é o certo. Marcar
+     cada linha como "não reconheci" nesse caso é alarme sem nada a conferir:
+     a marca é para colagem MISTA, onde a separação é que pode ter errado. */
+  const usadas = lidas.filter(x => x.destino !== "ignorar");
+  if (usadas.length && usadas.every(x => x.destino === "hoje"))
+    lidas.forEach(x => { x.solta = false; });
   return lidas;
 }
 
@@ -1520,7 +1549,7 @@ function blocoColar(p) {
 
   let lidas = [];
   const atualizar = () => {
-    lidas = lerColagem(area.value);
+    lidas = lerColagem(area.value, !(p.nome || "").trim());
     previa.textContent = "";
     previa.hidden = acoes.hidden = !lidas.length;
     if (!lidas.length) return;
