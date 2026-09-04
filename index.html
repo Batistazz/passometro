@@ -219,6 +219,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
   <button onclick="document.getElementById('arq').click()">Restaurar backup</button>
   <input type="file" id="arq" accept=".json" hidden onchange="abrirArquivo(event)">
   <button onclick="abrirFolhao()">Exames do folhão</button>
+  <button onclick="window.open(FOLHAO_URL,'_blank','noopener')" title="Abre o folhão numa aba nova, para importar laudos">Abrir folhão ↗</button>
   <input type="file" id="folhaoArq" accept=".json" hidden onchange="importarFolhao(event)">
   <button class="perigo" onclick="limparTudo()">Limpar tudo</button>
 </div>
