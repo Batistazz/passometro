@@ -38,10 +38,11 @@ button:hover{background:rgba(255,255,255,.15)}
 button.forte{background:#fff;color:var(--marca);border-color:#fff;font-weight:600}
 button.perigo{border-color:#ffc9c6;color:#ffe3e1}
 .dica{padding:6px 12px;background:#fffbe6;border-bottom:1px solid #e8dfae;font-size:12px;color:#5b4a00}
+.dica.urgente{background:#fdecea;border-bottom-color:#f0b4ae;color:#8c1d18;font-weight:600}
 
 /* ---------------------------------------------------------- grade */
 .rolagem{overflow:auto;padding:10px}
-table{border-collapse:collapse;background:#fff;table-layout:fixed;width:1860px}
+table{border-collapse:collapse;background:#fff;table-layout:fixed;width:1730px}
 th,td{border:1px solid var(--linha);vertical-align:top;padding:0}
 thead th{position:sticky;top:0;z-index:10;background:var(--marca);color:#fff;
          font-size:11px;text-transform:uppercase;letter-spacing:.3px;
@@ -67,7 +68,9 @@ td.leito .campo{font-weight:700;font-size:15px;text-align:center}
      border-radius:4px;padding:0 5px}
 
 /* medicações e ATB: lista de itens dentro da célula */
-.itens{padding:3px 4px;font-size:12px}
+.itens{padding:3px 0;font-size:12px}
+.rotulo-med{margin-top:5px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;
+            color:var(--fraca);border-top:1px dotted var(--linha);padding-top:3px}
 .item{display:flex;gap:4px;align-items:center;margin-bottom:4px;flex-wrap:wrap}
 .item input.txt{flex:1 1 100%}
 .item textarea,.item input.txt{flex:1;border:0;border-bottom:1px dotted var(--linha);
@@ -112,10 +115,14 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
           border:.4pt solid #000;text-transform:uppercase;position:static}
 .folha td{border:.4pt solid #000;padding:.8mm 1mm;vertical-align:top;
           white-space:pre-wrap;overflow-wrap:anywhere}
+.folha td .cel{display:-webkit-box;-webkit-box-orient:vertical;
+               -webkit-line-clamp:13;line-clamp:13;overflow:hidden}
 .folha td.leito{font-weight:700;font-size:9pt;text-align:center}
 .folha .dih{background:none;color:#000}
 .folha .susp{text-decoration:line-through}
-.folha .manus{border-bottom:.5pt solid #444;display:inline-block;min-width:10mm}
+.folha .manus{border-bottom:.5pt solid #444;display:inline-block;min-width:14mm}
+.folha .manus.larga{min-width:60mm}
+.folha tr.manus-linha td{border-top:0;padding:1.2mm 1mm 2mm;font-size:6.8pt;color:#333}
 </style>
 </head>
 <body>
@@ -126,7 +133,7 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
   <button onclick="ordenar()">Ordenar por leito</button>
   <span class="espaco"></span>
   <button onclick="window.print()">Imprimir</button>
-  <button onclick="salvarArquivo()">Salvar arquivo</button>
+  <button class="forte" onclick="salvarArquivo()">Backup (salvar arquivo)</button>
   <button onclick="document.getElementById('arq').click()">Abrir arquivo</button>
   <input type="file" id="arq" accept=".json" hidden onchange="abrirArquivo(event)">
   <button class="perigo" onclick="limparTudo()">Limpar tudo</button>
@@ -139,13 +146,12 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
     <thead>
       <tr>
         <th style="width:70px">Leito</th>
-        <th style="width:210px">Paciente · idade · DIH</th>
-        <th style="width:210px">Problemas ativos</th>
-        <th style="width:240px">HPP · alergias · HMA</th>
-        <th style="width:230px">Exames</th>
-        <th style="width:230px">Medicações</th>
-        <th style="width:210px">Antimicrobianos</th>
-        <th style="width:230px">Hoje: evolução · avaliação · conduta</th>
+        <th style="width:250px">Paciente · DIH · medicações</th>
+        <th style="width:220px">Problemas ativos</th>
+        <th style="width:250px">HPP · alergias · HMA</th>
+        <th style="width:240px">Exames</th>
+        <th style="width:220px">Antimicrobianos</th>
+        <th style="width:250px">Hoje: evolução · avaliação · conduta</th>
         <th style="width:196px">Pendências</th>
         <th style="width:34px"></th>
       </tr>
@@ -162,6 +168,7 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
 <script>
 "use strict";
 const CHAVE = "passometro_scls_v1";
+const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
 const POR_FOLHA = 3;          // pacientes por folha A4 paisagem
 const CAMPOS_TEXTO = ["problemas", "caso", "exames", "hoje", "pendencias"];
 
@@ -249,7 +256,6 @@ function linhaDoPaciente(p) {
   tr.appendChild(celulaCampo(p, "problemas"));
   tr.appendChild(celulaCampo(p, "caso"));
   tr.appendChild(celulaCampo(p, "exames"));
-  tr.appendChild(celulaLista(p, "medicacoes"));
   tr.appendChild(celulaLista(p, "atbs"));
   tr.appendChild(celulaCampo(p, "hoje"));
   tr.appendChild(celulaCampo(p, "pendencias"));
@@ -309,6 +315,14 @@ function celulaIdentidade(p) {
   linha2.append(idade, document.createTextNode("anos · internou"),
                 data, dih);
   caixa.append(nome, linha2);
+
+  // As medicações moram aqui, embaixo da identificação: a coluna própria
+  // gastava largura enquanto esta sobrava espaço vertical.
+  const rotulo = document.createElement("div");
+  rotulo.className = "rotulo-med";
+  rotulo.textContent = "Medicações";
+  caixa.append(rotulo, listaDeItens(p, "medicacoes"));
+
   td.appendChild(caixa);
   return td;
 }
@@ -318,6 +332,11 @@ function celulaIdentidade(p) {
    Antimicrobiano tem data de início, e o dia se calcula sozinho. */
 function celulaLista(p, chave) {
   const td = document.createElement("td");
+  td.appendChild(listaDeItens(p, chave));
+  return td;
+}
+
+function listaDeItens(p, chave) {
   const caixa = document.createElement("div");
   caixa.className = "itens";
   const eAtb = chave === "atbs";
@@ -377,9 +396,7 @@ function celulaLista(p, chave) {
     salvar(); render();
   };
   caixa.appendChild(mais);
-
-  td.appendChild(caixa);
-  return td;
+  return caixa;
 }
 
 function crescer(area) {
@@ -429,9 +446,9 @@ function renderFolhas() {
     const tabela = document.createElement("table");
     const cabecalho = document.createElement("thead");
     const linha = document.createElement("tr");
-    [["Leito", "6%"], ["Paciente · DIH", "13%"], ["Problemas ativos", "12%"],
-     ["HPP · alergias · HMA", "15%"], ["Exames", "13%"], ["Medicações", "13%"],
-     ["Antimicrobianos", "11%"], ["Hoje", "13%"], ["Pendências", "10%"]]
+    [["Leito", "6%"], ["Paciente · DIH · medicações", "19%"], ["Problemas ativos", "13%"],
+     ["HPP · alergias · HMA", "16%"], ["Exames", "14%"],
+     ["Antimicrobianos", "11%"], ["Hoje", "12%"], ["Pendências", "9%"]]
       .forEach(([nome, largura]) => {
         const th = document.createElement("th");
         th.textContent = nome; th.style.width = largura;
@@ -443,6 +460,7 @@ function renderFolhas() {
     const corpo = document.createElement("tbody");
     lista.slice(f * POR_FOLHA, (f + 1) * POR_FOLHA).forEach(p => {
       corpo.appendChild(linhaImpressa(p));
+      corpo.appendChild(linhaManuscrita(8));
     });
     tabela.appendChild(corpo);
     folha.appendChild(tabela);
@@ -459,21 +477,18 @@ function linhaImpressa(p) {
   ident.append(negrito(p.nome || ""));
   if (p.idade) ident.append(txt(", " + p.idade + "a"));
   if (dih) { ident.append(txt("  ")); ident.append(negrito(dih)); }
+  (p.medicacoes || []).filter(m => (m.texto || "").trim()).forEach(m => {
+    ident.append(document.createElement("br"));
+    const trecho = document.createElement("span");
+    if (m.suspenso) trecho.className = "susp";
+    trecho.textContent = m.texto;
+    ident.appendChild(trecho);
+  });
   tr.appendChild(ident);
 
   tr.appendChild(celulaTexto(p.problemas));
   tr.appendChild(celulaTexto(p.caso));
   tr.appendChild(celulaTexto(p.exames));
-
-  const meds = document.createElement("td");
-  (p.medicacoes || []).filter(m => (m.texto || "").trim()).forEach((m, i) => {
-    if (i) meds.append(document.createElement("br"));
-    const trecho = document.createElement("span");
-    if (m.suspenso) trecho.className = "susp";
-    trecho.textContent = m.texto;
-    meds.appendChild(trecho);
-  });
-  tr.appendChild(meds);
 
   const atbs = document.createElement("td");
   (p.atbs || []).filter(a => (a.texto || "").trim()).forEach((a, i) => {
@@ -485,18 +500,42 @@ function linhaImpressa(p) {
 
   tr.appendChild(celulaTexto(p.hoje));
 
-  const pend = document.createElement("td");
-  pend.append(txt(p.pendencias || ""));
-  pend.append(document.createElement("br"));
-  ["PA", "FC", "FR", "Tax", "SatO₂"].forEach(rotulo => {
-    pend.append(txt(rotulo + " "));
+  tr.appendChild(celulaTexto(p.pendencias));
+  // Sem limite, o paciente com muito texto empurra os outros para a folha
+  // seguinte e o cabeçalho some. O corte por LINHAS deixa reticências
+  // visíveis; a íntegra continua na tela.
+  tr.querySelectorAll("td").forEach(envolver);
+  return tr;
+}
+
+function envolver(td) {
+  const cel = document.createElement("div");
+  cel.className = "cel";
+  while (td.firstChild) cel.appendChild(td.firstChild);
+  td.appendChild(cel);
+}
+
+/* Faixa manuscrita: uma linha inteira embaixo do paciente, atravessando a
+   folha. Espremida dentro da coluna de pendências, quebrava no meio e ficava
+   torta — os campos precisam de largura, não de altura. */
+function linhaManuscrita(colunas) {
+  const tr = document.createElement("tr");
+  tr.className = "manus-linha";
+  const td = document.createElement("td");
+  td.colSpan = colunas;
+  ["PA", "FC", "FR", "Tax", "SatO₂", "HGT"].forEach(rotulo => {
+    td.append(txt(rotulo + " "));
     const risco = document.createElement("span");
     risco.className = "manus";
     risco.innerHTML = "&nbsp;";
-    pend.appendChild(risco);
-    pend.append(txt(" "));
+    td.appendChild(risco);
+    td.append(txt("   "));
   });
-  tr.appendChild(pend);
+  const anotacao = document.createElement("span");
+  anotacao.className = "manus larga";
+  anotacao.innerHTML = "&nbsp;";
+  td.appendChild(anotacao);
+  tr.appendChild(td);
   return tr;
 }
 
@@ -511,7 +550,7 @@ function negrito(s) { const b = document.createElement("b"); b.textContent = s; 
 function meta(s) { const e = document.createElement("span"); e.className = "meta"; e.textContent = s; return e; }
 
 /* ------------------------------------------------- arquivo e avisos */
-function salvarArquivo() {
+function salvarArquivo(silencioso) {
   const pacote = { formato: "passometro-scls", versao: 1,
                    exportado_em: new Date().toISOString(), dados: dados };
   const blob = new Blob([JSON.stringify(pacote, null, 2)], { type: "application/json" });
@@ -522,7 +561,8 @@ function salvarArquivo() {
   a.download = "passometro-" + d.toISOString().slice(0, 10) + ".json";
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  aviso("Arquivo salvo. Leve-o para o outro computador e use Abrir arquivo.");
+  try { localStorage.setItem(CHAVE_BACKUP, new Date().toISOString()); } catch (e) {}
+  if (!silencioso) aviso("Backup salvo na pasta de downloads. Guarde-o: é a sua cópia de segurança.");
 }
 
 function abrirArquivo(evento) {
@@ -564,8 +604,26 @@ function resumo() {
   const partes = [n + " paciente(s)"];
   if (semData) partes.push(semData + " sem data de internação (DIH não calcula)");
   if (atbSemData) partes.push(atbSemData + " antimicrobiano(s) sem data de início");
-  partes.push("dados só neste navegador — use Salvar arquivo para levar junto");
-  document.getElementById("dica").textContent = partes.join(" · ");
+  let quando = null;
+  try { quando = localStorage.getItem(CHAVE_BACKUP); } catch (e) {}
+  const dica = document.getElementById("dica");
+  dica.classList.remove("urgente");
+  if (!n) {
+    partes.push("dados só neste navegador");
+  } else if (!quando) {
+    partes.push("SEM BACKUP — clique em Backup antes de fechar");
+    dica.classList.add("urgente");
+  } else {
+    const horas = (Date.now() - new Date(quando)) / 3600000;
+    const carimbo = new Date(quando).toLocaleString("pt-BR",
+      { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    partes.push("último backup " + carimbo);
+    if (horas > 12) {
+      partes.push("faça um backup novo");
+      dica.classList.add("urgente");
+    }
+  }
+  dica.textContent = partes.join(" · ");
 }
 function aviso(texto) {
   const d = document.getElementById("dica");
