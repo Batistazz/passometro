@@ -32,6 +32,10 @@ body{margin:0;background:var(--papel);color:var(--tinta);
        padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .barra b{font-size:15px;margin-right:6px}
 .barra .espaco{margin-left:auto}
+.barra .versao{font-size:11px;opacity:.65;letter-spacing:.3px}
+.aviso-nova{background:#1a7f4b;color:#fff;padding:8px 12px;font-size:13px;
+            display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.aviso-nova button{border-color:#fff;background:#fff;color:#1a7f4b;font-weight:600}
 button{font:inherit;font-size:13px;padding:6px 11px;border-radius:6px;
        border:1px solid rgba(255,255,255,.55);background:transparent;color:#fff;cursor:pointer}
 button:hover{background:rgba(255,255,255,.15)}
@@ -254,7 +258,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 <body>
 
 <div class="barra">
-  <b>PASSÔMETRO</b><span id="servico">Enfermaria / SCLS</span>
+  <b>PASSÔMETRO</b><span id="servico">Enfermaria / SCLS</span><span class="versao" id="versao" title="Versão desta página"></span>
   <button class="forte" onclick="novoPaciente()">+ Paciente</button>
   <button onclick="abrirVarios()">+ Vários leitos</button>
   <button onclick="ordenar()">Ordenar por leito</button>
@@ -327,6 +331,13 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 
 <script>
 "use strict";
+/* Carimbo desta versao. E' trocado a cada publicacao e serve para duas
+   coisas: voce ver na barra o que esta rodando, e a pagina descobrir sozinha
+   que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
+   minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
+   olhando uma versao velha sem ter como saber. */
+const VERSAO = "2026-09-04-1636";
+
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
 const FOLHAO_URL = "https://batistazz.github.io/gama/";
@@ -1664,6 +1675,35 @@ document.getElementById("ficha").addEventListener("mousedown", evento => {
 document.addEventListener("keydown", evento => {
   if (evento.key === "Escape") fecharPainel();
 });
+
+/* Procura versao nova sem atrapalhar: busca a propria pagina ignorando o
+   cache e compara o carimbo. Se falhar (sem internet, por exemplo), nao
+   acontece nada — o passometro funciona offline de qualquer jeito. */
+function conferirVersao() {
+  if (!window.fetch || location.protocol === "file:") return;
+  fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })
+    .then(r => r.ok ? r.text() : null)
+    .then(texto => {
+      if (!texto) return;
+      const m = /const VERSAO = "([^"]+)"/.exec(texto);
+      if (!m || m[1] === VERSAO) return;
+      const faixa = document.createElement("div");
+      faixa.className = "aviso-nova";
+      faixa.append(document.createTextNode(
+        "Existe uma versão mais nova desta página (" + m[1] + "). " +
+        "A sua é a " + VERSAO + "."));
+      const botao = document.createElement("button");
+      botao.textContent = "Atualizar agora";
+      botao.onclick = () => location.reload();
+      faixa.appendChild(botao);
+      const dica = document.getElementById("dica");
+      dica.parentNode.insertBefore(faixa, dica);
+    })
+    .catch(() => {});
+}
+
+document.getElementById("versao").textContent = VERSAO;
+setTimeout(conferirVersao, 1500);
 
 window.addEventListener("beforeprint", renderFolhas);
 render();
