@@ -93,7 +93,63 @@ td.acoes{width:34px;text-align:center;background:#fff}
 td.acoes button{color:var(--fraca);border-color:var(--linha);padding:2px 6px;font-size:12px}
 td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--alerta)}
 
-.vazio{padding:24px;text-align:center;color:var(--fraca);background:#fff}
+.vazio{padding:0;background:#fff;border:1px solid var(--linha);border-radius:10px;
+       max-width:760px;margin:26px auto;overflow:hidden}
+.vazio h2{margin:0;padding:16px 22px;background:var(--marca-clara);color:var(--marca);
+          font-size:17px;border-bottom:1px solid var(--linha)}
+.vazio .corpo{padding:18px 22px}
+.vazio p{margin:0 0 14px;color:var(--tinta);line-height:1.5}
+.vazio ol{margin:0 0 4px;padding-left:22px}
+.vazio li{margin-bottom:12px;line-height:1.5}
+.vazio li b{color:var(--marca)}
+.vazio .chamada{display:inline-block;background:var(--marca);color:#fff;border:0;
+                border-radius:6px;padding:7px 14px;font:inherit;font-size:14px;cursor:pointer}
+.vazio .chamada.claro{background:#fff;color:var(--marca);border:1px solid var(--marca)}
+.vazio .nota{margin-top:16px;padding:12px 14px;background:#fffbe6;border-left:4px solid #e0c341;
+             border-radius:4px;font-size:13px;color:#5b4a00}
+
+/* --------------------------------------------------- ficha do paciente */
+.ficha[hidden]{display:none}
+.ficha{position:fixed;inset:0;z-index:50;background:rgba(22,32,43,.55);
+       display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:16px}
+.ficha .papel{background:#fff;border-radius:10px;width:100%;max-width:980px;
+              box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.ficha .topo{position:sticky;top:0;background:var(--marca);color:#fff;padding:10px 16px;
+             border-radius:10px 10px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ficha .topo .leito{font-size:20px;font-weight:700}
+.ficha .topo .nome{font-size:15px;text-transform:uppercase}
+.ficha .topo .dih{background:rgba(255,255,255,.2);color:#fff}
+.ficha .topo .espaco{margin-left:auto}
+.ficha .conteudo{padding:16px 18px 26px}
+.ficha .bloco{border:1px solid var(--linha);border-radius:8px;margin-bottom:14px;overflow:hidden}
+.ficha .bloco>h3{margin:0;padding:8px 12px;background:#f4f6f8;border-bottom:1px solid var(--linha);
+                 font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--fraca)}
+.ficha .bloco>div{padding:10px 12px}
+.ficha label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.3px;
+             color:var(--fraca);margin:0 0 3px}
+.ficha .duplo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ficha .trio{display:grid;grid-template-columns:1fr 90px 150px;gap:10px;align-items:end}
+.ficha textarea,.ficha input[type=text],.ficha input[type=date],.ficha input[type=number]{
+  width:100%;border:1px solid var(--linha);border-radius:6px;padding:7px 9px;
+  font:inherit;font-size:14px;background:#fff;outline:none;resize:vertical}
+.ficha textarea:focus,.ficha input:focus{border-color:var(--marca);box-shadow:0 0 0 2px var(--marca-clara)}
+.ficha .ajuda{font-size:12px;color:var(--fraca);margin:-4px 0 10px}
+.ficha .rodape{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--linha);
+               padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;border-radius:0 0 10px 10px}
+.ficha .rodape button{border-color:var(--marca);color:var(--marca)}
+.ficha .rodape button:hover{background:var(--marca-clara)}
+.ficha .rodape button.forte{background:var(--marca);color:#fff}
+.ficha .rodape .espaco{margin-left:auto}
+.ficha .itens{padding:2px 0}
+.ficha .item{flex-wrap:nowrap;gap:8px}
+.ficha .item input.txt{flex:1 1 auto}
+.ficha .item .data{width:140px;border:1px solid var(--linha);border-radius:5px;padding:4px 6px}
+.ficha .item .dia{min-width:44px;font-size:13px}
+td.leito button.abrir{width:100%;border:0;background:none;color:var(--marca);
+       font:inherit;font-weight:700;font-size:15px;padding:6px 2px;cursor:pointer;border-radius:4px}
+td.leito button.abrir:hover{background:var(--marca-clara)}
+td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
+@media print{.ficha{display:none !important}}
 
 /* ------------------------------------------------------- impressão */
 .folhas{display:none}
@@ -136,6 +192,9 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
   <button class="forte" onclick="salvarArquivo()">Backup (salvar arquivo)</button>
   <button onclick="document.getElementById('arq').click()">Abrir arquivo</button>
   <input type="file" id="arq" accept=".json" hidden onchange="abrirArquivo(event)">
+  <button onclick="document.getElementById('folhaoArq').click()">Puxar exames do folhão</button>
+  <input type="file" id="folhaoArq" accept=".json" hidden onchange="importarFolhao(event)">
+  <button onclick="window.open(FOLHAO_URL,'_blank','noopener')">Abrir folhão</button>
   <button class="perigo" onclick="limparTudo()">Limpar tudo</button>
 </div>
 
@@ -159,9 +218,35 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
     <tbody id="corpo"></tbody>
   </table>
   <div class="vazio" id="vazio" hidden>
-    Nenhum paciente ainda. Clique em <b>+ Paciente</b>.
+    <h2>Passômetro da enfermaria — comece por aqui</h2>
+    <div class="corpo">
+      <p>Esta página é o passômetro. O que você digita aqui é o que sai no papel,
+         e os dados ficam <b>neste navegador</b> — não sobem para lugar nenhum.</p>
+      <ol>
+        <li><b>Já tem um arquivo do passômetro?</b> Use
+            <button class="chamada claro" onclick="document.getElementById('arq').click()">Abrir arquivo</button>
+            e a enfermaria inteira aparece.</li>
+        <li><b>Começando do zero?</b>
+            <button class="chamada" onclick="novoPaciente()">+ Paciente</button>
+            e preencha leito, nome e a data de internação. O <b>DIH se calcula sozinho</b>
+            a partir dela, todo dia, e nunca mais fica errado.</li>
+        <li><b>Para evoluir um paciente</b>, clique no número do leito: abre a ficha dele,
+            com espaço para escrever a evolução, a avaliação e a conduta.</li>
+        <li><b>Exames</b> vêm do folhão: lá você exporta o backup e aqui usa
+            <b>Puxar exames do folhão</b>. Você não digita exame.</li>
+        <li><b>Imprimir</b> sai em A4 deitado, 3 pacientes por folha, com espaço
+            para anotar sinais vitais à mão.</li>
+      </ol>
+      <div class="nota">
+        <b>Faça backup todo dia.</b> Os dados vivem só neste navegador: se ele for
+        limpo, some tudo. O botão <b>Backup</b> baixa um arquivo — é ele que você
+        leva para outro computador e é a sua única cópia.
+      </div>
+    </div>
   </div>
 </div>
+
+<div class="ficha" id="ficha" hidden></div>
 
 <div class="folhas" id="folhas"></div>
 
@@ -169,6 +254,7 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
 "use strict";
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
+const FOLHAO_URL = "https://batistazz.github.io/gama/";
 const POR_FOLHA = 3;          // pacientes por folha A4 paisagem
 const CAMPOS_TEXTO = ["problemas", "caso", "exames", "hoje", "pendencias"];
 
@@ -209,6 +295,7 @@ function rotuloDia(iso) { const n = diasDesde(iso); return n === null ? null : "
 function pacienteVazio() {
   return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
            leito: "", nome: "", idade: "", internacao: "",
+           responsavel: "",
            problemas: "", caso: "", exames: "", hoje: "", pendencias: "",
            medicacoes: [], atbs: [] };
 }
@@ -251,7 +338,7 @@ function render() {
 
 function linhaDoPaciente(p) {
   const tr = document.createElement("tr");
-  tr.appendChild(celulaCampo(p, "leito", "leito"));
+  tr.appendChild(celulaLeito(p));
   tr.appendChild(celulaIdentidade(p));
   tr.appendChild(celulaCampo(p, "problemas"));
   tr.appendChild(celulaCampo(p, "caso"));
@@ -269,6 +356,21 @@ function linhaDoPaciente(p) {
   acoes.appendChild(botao);
   tr.appendChild(acoes);
   return tr;
+}
+
+/* O leito abre a ficha do paciente. A grade serve para ver a enfermaria
+   inteira e imprimir; para evoluir, cada um abre o seu. */
+function celulaLeito(p) {
+  const td = document.createElement("td");
+  td.className = "leito";
+  const botao = document.createElement("button");
+  botao.className = "abrir";
+  botao.title = "Abrir a ficha deste paciente";
+  if (p.leito) botao.textContent = p.leito;
+  else { botao.innerHTML = '<span class="sem">sem leito</span>'; }
+  botao.onclick = () => abrirFicha(p.id);
+  td.appendChild(botao);
+  return td;
 }
 
 function celulaCampo(p, chave, classe) {
@@ -629,6 +731,252 @@ function aviso(texto) {
   const d = document.getElementById("dica");
   d.textContent = texto;
   setTimeout(resumo, 6000);
+}
+
+
+/* ==================================================== ficha do paciente
+   A grade mostra a enfermaria inteira; a ficha é onde se evolui um paciente
+   com espaço para escrever. Uma coisa não substitui a outra: quem passa
+   visita abre a ficha do seu leito e vai para o próximo. */
+let fichaAberta = null;
+
+function abrirFicha(id) {
+  fichaAberta = id;
+  renderFicha();
+}
+function fecharFicha() {
+  fichaAberta = null;
+  document.getElementById("ficha").hidden = true;
+  salvar(); render();
+}
+function navegarFicha(passo) {
+  const i = dados.pacientes.findIndex(x => x.id === fichaAberta);
+  const proximo = dados.pacientes[i + passo];
+  if (!proximo) { fecharFicha(); return; }
+  salvar();
+  fichaAberta = proximo.id;
+  renderFicha();
+  document.getElementById("ficha").scrollTop = 0;
+}
+
+function campoFicha(p, chave, rotulo, linhas, dica) {
+  const caixa = document.createElement("div");
+  const lab = document.createElement("label");
+  lab.textContent = rotulo;
+  const area = document.createElement("textarea");
+  area.rows = linhas || 3;
+  area.value = p[chave] || "";
+  area.oninput = () => { p[chave] = area.value; salvarAdiado(); };
+  caixa.append(lab, area);
+  if (dica) {
+    const d = document.createElement("div");
+    d.className = "ajuda";
+    d.textContent = dica;
+    caixa.appendChild(d);
+  }
+  return caixa;
+}
+
+function blocoFicha(titulo) {
+  const bloco = document.createElement("div");
+  bloco.className = "bloco";
+  const h = document.createElement("h3");
+  h.textContent = titulo;
+  const corpo = document.createElement("div");
+  for (let i = 1; i < arguments.length; i++) corpo.appendChild(arguments[i]);
+  bloco.append(h, corpo);
+  return bloco;
+}
+
+function rotuloSolto(texto) {
+  const l = document.createElement("label");
+  l.textContent = texto;
+  l.style.marginTop = "6px";
+  return l;
+}
+
+function entrada(p, chave, rotulo, tipo) {
+  const caixa = document.createElement("div");
+  const lab = document.createElement("label");
+  lab.textContent = rotulo;
+  const campo = document.createElement("input");
+  campo.type = tipo;
+  campo.value = p[chave] || "";
+  campo.oninput = () => {
+    p[chave] = campo.value;
+    salvarAdiado();
+    const topo = document.querySelector(".ficha .topo");
+    if (topo) {
+      topo.querySelector(".leito").textContent = p.leito || "—";
+      topo.querySelector(".nome").textContent = p.nome || "(sem nome)";
+      topo.querySelector(".dih").textContent = rotuloDih(p.internacao) || "D?IH";
+    }
+  };
+  caixa.append(lab, campo);
+  return caixa;
+}
+
+function avisoDih(p) {
+  const d = document.createElement("div");
+  d.className = "ajuda";
+  d.textContent = p.internacao
+    ? "DIH hoje: " + rotuloDih(p.internacao) + " — calculado da data de internação, não digitado."
+    : "Sem data de internação o DIH fica D?IH. Preencha uma vez e ele nunca mais erra.";
+  return d;
+}
+
+function renderFicha() {
+  const alvo = document.getElementById("ficha");
+  const p = dados.pacientes.find(x => x.id === fichaAberta);
+  if (!p) { alvo.hidden = true; return; }
+  alvo.hidden = false;
+  alvo.textContent = "";
+
+  const papel = document.createElement("div");
+  papel.className = "papel";
+
+  const topo = document.createElement("div");
+  topo.className = "topo";
+  const leito = document.createElement("span");
+  leito.className = "leito"; leito.textContent = p.leito || "—";
+  const nome = document.createElement("span");
+  nome.className = "nome"; nome.textContent = p.nome || "(sem nome)";
+  const dih = document.createElement("span");
+  dih.className = "dih"; dih.textContent = rotuloDih(p.internacao) || "D?IH";
+  const espaco = document.createElement("span"); espaco.className = "espaco";
+  const fechar = document.createElement("button");
+  fechar.textContent = "Voltar à enfermaria";
+  fechar.onclick = fecharFicha;
+  topo.append(leito, nome, dih, espaco, fechar);
+
+  const conteudo = document.createElement("div");
+  conteudo.className = "conteudo";
+
+  const identLeito = document.createElement("div");
+  identLeito.className = "duplo";
+  identLeito.append(entrada(p, "leito", "Leito", "text"),
+                    entrada(p, "responsavel", "Responsável", "text"));
+  const ident = document.createElement("div");
+  ident.className = "trio";
+  ident.append(entrada(p, "nome", "Paciente", "text"),
+               entrada(p, "idade", "Idade", "number"),
+               entrada(p, "internacao", "Internou em", "date"));
+  conteudo.appendChild(blocoFicha("Identificação", identLeito, ident, avisoDih(p)));
+
+  conteudo.appendChild(blocoFicha("Caso",
+    campoFicha(p, "problemas", "Problemas / diagnósticos ativos", 2),
+    campoFicha(p, "caso", "HPP · alergias · HMA", 5)));
+
+  conteudo.appendChild(blocoFicha("Tratamento",
+    rotuloSolto("Medicações — o botão riscar marca a suspensa, sem apagar"),
+    listaDeItens(p, "medicacoes"),
+    rotuloSolto("Antimicrobianos — preencha a data de início e o D# aparece sozinho"),
+    listaDeItens(p, "atbs")));
+
+  conteudo.appendChild(blocoFicha("Exames",
+    campoFicha(p, "exames", "Resultados", 5,
+      "Vêm do folhão pelo botão \"Puxar exames do folhão\". Digite aqui só o que faltar.")));
+
+  conteudo.appendChild(blocoFicha("Hoje",
+    campoFicha(p, "hoje", "Evolução · avaliação · conduta", 8,
+      "É o que sai na coluna HOJE do passômetro impresso."),
+    campoFicha(p, "pendencias", "Pendências", 3)));
+
+  const rodape = document.createElement("div");
+  rodape.className = "rodape";
+  const i = dados.pacientes.findIndex(x => x.id === fichaAberta);
+  const anterior = document.createElement("button");
+  anterior.textContent = "◀ Leito anterior";
+  anterior.disabled = i <= 0;
+  anterior.onclick = () => navegarFicha(-1);
+  const salvarFechar = document.createElement("button");
+  salvarFechar.textContent = "Salvar e voltar";
+  salvarFechar.onclick = fecharFicha;
+  const esp = document.createElement("span"); esp.className = "espaco";
+  const proximo = document.createElement("button");
+  proximo.className = "forte";
+  proximo.textContent = i >= dados.pacientes.length - 1
+    ? "Salvar e voltar à enfermaria" : "Salvar e abrir próximo leito ▶";
+  proximo.onclick = () => navegarFicha(1);
+  rodape.append(anterior, salvarFechar, esp, proximo);
+
+  papel.append(topo, conteudo, rodape);
+  alvo.appendChild(papel);
+}
+
+/* =============================================== exames vindos do folhão
+   O folhão (Gama) é quem lê o laudo; aqui só recebemos o resultado pronto.
+   O arquivo é o backup dele. O casamento é por LEITO, e nada entra sem você
+   ver antes o que vai mudar. */
+function importarFolhao(evento) {
+  const arquivo = evento.target.files[0];
+  if (!arquivo) return;
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    try {
+      aplicarFolhao(JSON.parse(leitor.result));
+    } catch (erro) {
+      aviso("Não consegui ler o backup do folhão: " + erro.message);
+    } finally {
+      evento.target.value = "";
+    }
+  };
+  leitor.readAsText(arquivo);
+}
+
+function aplicarFolhao(pacote) {
+  const banco = (pacote && pacote.db) || pacote;
+  if (!banco || !Array.isArray(banco.observations)) {
+    aviso("Esse arquivo não é um backup do folhão (falta a lista de observações).");
+    return;
+  }
+  const leitoDoEncontro = {};
+  (banco.encounters || []).forEach(e => { leitoDoEncontro[e.id] = String(e.bed || "").trim(); });
+
+  const porLeito = {};
+  banco.observations.forEach(o => {
+    const leito = leitoDoEncontro[o.encounter_id];
+    if (!leito || !o.collection_datetime) return;
+    const dia = String(o.collection_datetime).slice(0, 10);
+    const valor = o.value_text || (o.value_numeric != null ? String(o.value_numeric) : "");
+    if (!valor) return;
+    const nome = o.exam_name_original || o.exam_name_normalized || "?";
+    porLeito[leito] = porLeito[leito] || {};
+    porLeito[leito][dia] = porLeito[leito][dia] || [];
+    porLeito[leito][dia].push(nome + " " + valor + (o.unit ? " " + o.unit : ""));
+  });
+
+  const casados = [], semDono = [];
+  Object.keys(porLeito).forEach(leito => {
+    const paciente = dados.pacientes.find(p => String(p.leito || "").trim() === leito);
+    const dias = Object.keys(porLeito[leito]).sort().slice(-3);
+    const texto = dias.map(d =>
+      d.slice(8, 10) + "/" + d.slice(5, 7) + ": " + porLeito[leito][d].join(" | ")
+    ).join("\n");
+    const total = dias.reduce((n, d) => n + porLeito[leito][d].length, 0);
+    if (paciente) casados.push({ paciente: paciente, leito: leito, texto: texto, total: total, dias: dias.length });
+    else semDono.push(leito + " (" + total + " resultado(s))");
+  });
+
+  if (!casados.length) {
+    aviso("Nenhum leito do folhão bate com os leitos daqui." +
+          (semDono.length ? " No arquivo há: " + semDono.join(", ") : ""));
+    return;
+  }
+
+  const resumo = casados.map(c =>
+    "  " + c.leito + " — " + (c.paciente.nome || "sem nome") + ": " +
+    c.total + " resultado(s) em " + c.dias + " data(s)").join("\n");
+  const perdidos = semDono.length
+    ? "\n\nSem paciente aqui (nada será feito com estes):\n  " + semDono.join("\n  ") : "";
+  if (!confirm("O folhão traz exames para estes leitos:\n\n" + resumo + perdidos +
+               "\n\nIsto SUBSTITUI o texto de exames destes pacientes. Continuar?")) return;
+
+  casados.forEach(c => { c.paciente.exames = c.texto; });
+  salvar(); render();
+  if (fichaAberta) renderFicha();
+  aviso(casados.length + " leito(s) receberam exames do folhão." +
+        (semDono.length ? " " + semDono.length + " leito(s) do arquivo não têm paciente aqui." : ""));
 }
 
 window.addEventListener("beforeprint", renderFolhas);
