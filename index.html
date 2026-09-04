@@ -168,7 +168,8 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 .bloco-exame.copiado .cabeca{background:#dff3e6}
 .bloco-exame .leito{font-weight:700;font-size:16px}
 .bloco-exame .nome{font-weight:700;text-transform:uppercase;font-size:13px}
-.bloco-exame .acao{margin-left:auto;font-size:12px;color:var(--marca);white-space:nowrap}
+.bloco-exame .copiadores{margin-left:auto;display:flex;gap:6px}
+.bloco-exame .acao{font-size:12px;color:var(--ok);white-space:nowrap;font-weight:600}
 .bloco-exame.copiado .acao{color:var(--ok);font-weight:600}
 .bloco-exame .linhas{padding:8px 12px;font-size:12px;line-height:1.5;
                      white-space:pre-wrap;overflow-wrap:anywhere}
@@ -197,13 +198,12 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
           border:.4pt solid #000;text-transform:uppercase;position:static}
 .folha td{border:.4pt solid #000;padding:.8mm 1mm;vertical-align:top;
           white-space:pre-wrap;overflow-wrap:anywhere}
-/* 24 linhas por célula: MEDIDO, não escolhido. Com 26 dois pacientes cheios
-   estouravam a folha e saía página em branco; com 20 sobrava espaço à toa.
-   Com 24 a enfermaria de 13 cabe nas mesmas 5 folhas de quando o limite era
-   13 linhas — quase o dobro de texto por paciente, sem gastar papel a mais —
-   e nenhuma folha fica com menos de dois pacientes. */
-.folha td .cel{display:-webkit-box;-webkit-box-orient:vertical;
-               -webkit-line-clamp:24;line-clamp:24;overflow:hidden}
+/* O papel NÃO corta. O bloco cresce para baixo e a paginação por altura
+   medida decide quantos pacientes cabem — pode ser dois, pode ser quatro.
+   Antes havia um limite de linhas por célula, e o que passava sumia com
+   reticências: o papel escondia e ninguém sabia. Agora quem controla o
+   volume é quem copia, com "principais + alterados" ou "tudo". */
+.folha td .cel{display:block}
 .folha td.leito{font-weight:700;font-size:9pt;text-align:center}
 .folha .dih{background:none;color:#000}
 .folha .susp{text-decoration:line-through}
@@ -332,6 +332,31 @@ function vaiParaOPapel(chave, valorNumerico, valorTexto) {
   if (ZERO_SEM_VALOR.indexOf(chave) < 0) return true;
   const n = valorNumerico != null ? valorNumerico : parseFloat(String(valorTexto).replace(",", "."));
   return !(n === 0);
+}
+
+/* Faixa de referencia do catalogo do folhao, extraida do parser.js dele por
+   scripts/extrair_catalogo_folhao.py. Serve de ultima instancia: vale a faixa
+   que o proprio laudo trouxe, quando trouxe. Exame sem faixa nenhuma NUNCA e
+   marcado como alterado — dizer "normal" ou "alterado" sem referencia seria
+   inventar. */
+const REFERENCIA = {"hemoglobina":[12.0,17.0],"hematocrito":[36.0,52.0],"hemacias":[4.0,6.0],"vcm":[80.0,100.0],"hcm":[27.0,32.0],"chcm":[31.0,36.0],"rdw":[11.5,14.5],"leucocitos":[4000.0,11000.0],"neutrofilos":[1800.0,7000.0],"bastoes":[0.0,700.0],"linfocitos":[1000.0,4000.0],"linfocitos_reativos":[0.0,100.0],"monocitos":[200.0,1000.0],"eosinofilos":[0.0,500.0],"basofilos":[0.0,200.0],"metamielocitos":[0.0,0.0],"mielocitos":[0.0,0.0],"promielocitos":[0.0,0.0],"blastos":[0.0,0.0],"celulas_atipicas":[0.0,0.0],"plaquetas":[150000.0,450000.0],"vpm":[9.0,13.0],"creatinina":[0.6,1.3],"ureia":[15.0,45.0],"sodio":[135.0,145.0],"potassio":[3.5,5.1],"calcio":[8.5,10.5],"magnesio":[1.6,2.6],"fosforo":[2.5,4.5],"cloro":[98.0,107.0],"glicose":[70.0,99.0],"litio":[0.5,1.2],"acido_urico":[3.5,7.2],"ldh":[120.0,246.0],"amilase":[28.0,100.0],"lipase":[6.0,51.0],"ckmb":[0.0,25.0],"cpk":[30.0,200.0],"pcr":[0.0,5.0],"vhs":[0.0,20.0],"procalcitonina":[0.0,0.5],"ast":[0.0,40.0],"alt":[0.0,41.0],"fosfatase_alcalina":[40.0,129.0],"ggt":[8.0,61.0],"bilirrubina_total":[0.2,1.2],"bilirrubina_direta":[0.0,0.3],"bilirrubina_indireta":[0.0,0.9],"albumina":[3.5,5.2],"proteinas_totais":[6.0,8.0],"inr":[0.9,1.2],"tp":[10.0,13.0],"ttpa":[25.0,37.0],"fibrinogenio":[200.0,400.0],"ph":[7.35,7.45],"pco2":[35.0,45.0],"po2":[80.0,100.0],"hco3":[22.0,26.0],"be":[-3.0,3.0],"sato2":[95.0,100.0],"lactato":[0.5,2.0],"tco2":[23.0,27.0],"anion_gap":[8.0,16.0]};
+
+/* O punhado que aparece mesmo estando normal. Nao e' "os mais importantes":
+   e' o que a equipe olha em todo paciente, todo dia. */
+const PRINCIPAIS = ["hemoglobina", "leucocitos", "plaquetas", "creatinina",
+                    "ureia", "sodio", "potassio", "pcr"];
+
+function estaAlterado(chave, numero, minimo, maximo) {
+  if (typeof numero !== "number" || !isFinite(numero)) return false;
+  let faixa = null;
+  if (typeof minimo === "number" || typeof maximo === "number") {
+    faixa = [typeof minimo === "number" ? minimo : -Infinity,
+             typeof maximo === "number" ? maximo : Infinity];
+  } else if (REFERENCIA[chave]) {
+    faixa = REFERENCIA[chave];
+  }
+  if (!faixa) return false;
+  return numero < faixa[0] || numero > faixa[1];
 }
 
 function nomeCurto(chave, porExtenso) {
@@ -645,7 +670,6 @@ function renderFolhas() {
    dois sempre cabem. */
 const PX_POR_MM = 96 / 25.4;
 const ALTURA_UTIL_MM = 194;   // A4 paisagem (210mm) menos 8mm de margem em cima e embaixo
-const MINIMO_POR_FOLHA = 2;
 
 function paginarPorAltura(lista, agora, carimbo) {
   const medidor = document.createElement("div");
@@ -674,14 +698,21 @@ function paginarPorAltura(lista, agora, carimbo) {
     a.getBoundingClientRect().height + b.getBoundingClientRect().height);
   document.body.removeChild(medidor);
 
-  const orcamento = ALTURA_UTIL_MM * PX_POR_MM - alturaCabecalho - alturaTitulos;
+  // 0,92 e' margem de seguranca: a medida na tela e' um pouco mais generosa
+  // que a caixa real da impressao, e sem ela a folha transbordava e saia
+  // pagina em branco. Calibrado contra os 13 pacientes reais.
+  const orcamento = (ALTURA_UTIL_MM * PX_POR_MM - alturaCabecalho - alturaTitulos) * 0.92;
   const folhas = [];
   let atual = [], gasto = 0;
   lista.forEach((p, i) => {
     const altura = alturas[i] || 0;
-    // Cabe? Entra. Não cabe, mas a folha ainda não tem o mínimo? Entra também,
-    // porque uma folha com um paciente só desperdiça papel.
-    if (atual.length && gasto + altura > orcamento && atual.length >= MINIMO_POR_FOLHA) {
+    // Cabe? Entra. Não cabe? Vai para a folha seguinte, inteiro.
+    //
+    // Antes havia uma regra de mínimo dois por folha. Ela fazia sentido quando
+    // o texto era limitado, mas agora que nada é cortado, forçar o segundo
+    // paciente estourava a folha e saía página EM BRANCO. Entre gastar papel e
+    // esconder texto clínico, o papel é o que cede.
+    if (atual.length && gasto + altura > orcamento) {
       folhas.push(atual);
       atual = []; gasto = 0;
     }
@@ -689,8 +720,16 @@ function paginarPorAltura(lista, agora, carimbo) {
     gasto += altura;
   });
   if (atual.length) folhas.push(atual);
+
+  // Paciente cujo bloco sozinho nao cabe numa folha: ele transborda, e a
+  // pagina seguinte sai sem cabecalho. Nada e' cortado — mas quem imprime
+  // precisa saber onde esta o excesso para poder encurtar, se quiser.
+  naoCabem = lista.filter((p, i) => (alturas[i] || 0) > orcamento)
+                  .map(p => p.leito || p.nome || "sem leito");
   return folhas;
 }
+
+let naoCabem = [];
 
 function cabecalhoDaFolha(agora, carimbo, numero, total, pacientes) {
   const titulo = document.createElement("h1");
@@ -876,6 +915,10 @@ function resumo() {
       partes.push("faça um backup novo");
       dica.classList.add("urgente");
     }
+  }
+  if (naoCabem.length) {
+    partes.push("não cabe numa folha, vai transbordar: " + naoCabem.join(", ") +
+                " — encurte o texto ou aceite a folha extra");
   }
   dica.textContent = partes.join(" · ");
 }
@@ -1093,8 +1136,14 @@ function blocosDoFolhao(banco) {
     const dia = String(o.collection_datetime).slice(0, 10);
     if (!vaiParaOPapel(o.exam_name_normalized, o.value_numeric, valor)) return;
     // Sem unidade e com o nome curto: quem lê já sabe que hemoglobina é g/dL.
-    const nome = nomeCurto(o.exam_name_normalized, o.exam_name_original);
-    (enc.datas[dia] = enc.datas[dia] || []).push(nome + " " + valor);
+    const chave = o.exam_name_normalized;
+    const alterado = estaAlterado(chave, o.value_numeric, o.reference_min, o.reference_max);
+    (enc.datas[dia] = enc.datas[dia] || []).push({
+      chave: chave,
+      texto: nomeCurto(chave, o.exam_name_original) + " " + valor + (alterado ? "*" : ""),
+      principal: PRINCIPAIS.indexOf(chave) >= 0,
+      alterado: alterado
+    });
   });
 
   return Object.keys(encontros)
@@ -1102,13 +1151,18 @@ function blocosDoFolhao(banco) {
     .filter(e => Object.keys(e.datas).length)
     .map(e => {
       const dias = Object.keys(e.datas).sort().reverse();
+      const linha = (d, itens) => ({
+        rotulo: d.slice(8, 10) + "/" + d.slice(5, 7),
+        texto: itens.map(x => x.texto).join(" | ")
+      });
       return {
         leito: e.leito, nome: e.nome, dias: dias,
         total: dias.reduce((n, d) => n + e.datas[d].length, 0),
-        linhas: dias.map(d => ({
-          rotulo: d.slice(8, 10) + "/" + d.slice(5, 7),
-          texto: e.datas[d].join(" | ")
-        }))
+        // Principais + alterados: o resumo do paciente sem esconder achado.
+        linhas: dias.map(d => linha(d, e.datas[d].filter(x => x.principal || x.alterado)))
+                    .filter(l => l.texto),
+        // Tudo: o painel inteiro, para quem quiser.
+        linhasTudo: dias.map(d => linha(d, e.datas[d])).filter(l => l.texto)
       };
     })
     .sort((a, b) => chaveLeito(a.leito).localeCompare(chaveLeito(b.leito)));
@@ -1177,11 +1231,12 @@ function abrirFolhao() {
 }
 
 function blocoDeExame(b) {
-  const texto = b.linhas.map(l => l.rotulo + ": " + l.texto).join("\n");
+  const juntar = linhas => linhas.map(l => l.rotulo + ": " + l.texto).join("\n");
+  const compacto = juntar(b.linhas);
+  const completo = juntar(b.linhasTudo);
 
   const caixa = document.createElement("div");
   caixa.className = "bloco-exame";
-  caixa.title = "Clique para copiar os exames deste paciente";
 
   const cabeca = document.createElement("div");
   cabeca.className = "cabeca";
@@ -1190,8 +1245,24 @@ function blocoDeExame(b) {
   const nome = document.createElement("span");
   nome.className = "nome"; nome.textContent = b.nome || "(sem nome)";
   const acao = document.createElement("span");
-  acao.className = "acao"; acao.textContent = "clique para copiar";
-  cabeca.append(leito, nome, acao);
+  acao.className = "acao";
+
+  // Dois jeitos de copiar: o resumo, que é o que cabe na folha, e o painel
+  // inteiro, para quando alguém quiser tudo. Quem decide o volume é quem
+  // copia — o programa não esconde por conta própria.
+  const botoes = document.createElement("span");
+  botoes.className = "copiadores";
+  const bResumo = document.createElement("button");
+  bResumo.className = "mini";
+  bResumo.textContent = "principais + alterados";
+  bResumo.onclick = e => { e.stopPropagation(); copiar(compacto, caixa, acao); };
+  const bTudo = document.createElement("button");
+  bTudo.className = "mini";
+  bTudo.textContent = "tudo (" + b.total + ")";
+  bTudo.title = "Copia o painel inteiro de cada data";
+  bTudo.onclick = e => { e.stopPropagation(); copiar(completo, caixa, acao); };
+  botoes.append(bResumo, bTudo);
+  cabeca.append(leito, nome, botoes, acao);
 
   const linhas = document.createElement("div");
   linhas.className = "linhas";
@@ -1203,7 +1274,7 @@ function blocoDeExame(b) {
   });
 
   caixa.append(cabeca, linhas);
-  caixa.onclick = () => copiar(texto, caixa, acao);
+  caixa.onclick = () => copiar(compacto, caixa, acao);
   return caixa;
 }
 
@@ -1215,7 +1286,7 @@ function copiar(texto, caixa, acao) {
     acao.textContent = "copiado ✓";
     setTimeout(() => {
       caixa.classList.remove("copiado");
-      acao.textContent = "clique para copiar";
+      acao.textContent = "";
     }, 2500);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
