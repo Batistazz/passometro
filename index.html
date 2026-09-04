@@ -36,6 +36,8 @@ body{margin:0;background:var(--papel);color:var(--tinta);
 .aviso-nova{background:#1a7f4b;color:#fff;padding:8px 12px;font-size:13px;
             display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .aviso-nova button{border-color:#fff;background:#fff;color:#1a7f4b;font-weight:600}
+/* O atributo hidden tem de ganhar de qualquer display. */
+[hidden]{display:none !important}
 button{font:inherit;font-size:13px;padding:6px 11px;border-radius:6px;
        border:1px solid rgba(255,255,255,.55);background:transparent;color:#fff;cursor:pointer}
 button:hover{background:rgba(255,255,255,.15)}
@@ -161,6 +163,23 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
 .ficha .bloco>div{padding:10px 12px}
 .ficha label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.3px;
              color:var(--fraca);margin:0 0 3px}
+.ficha .linha-livre input{font-size:16px;padding:9px 11px}
+.ficha .entendi{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
+.ficha .entendi > div{flex:0 0 auto}
+.ficha .entendi .cresce{flex:1 1 200px;min-width:150px}
+.ficha .entendi label{margin-bottom:3px}
+.ficha .entendi input{font-size:13px;padding:5px 7px}
+.ficha .entendi .curto input{width:74px}
+.ficha .entendi .data input{width:150px}
+.ficha .entendi .vago input{border-color:var(--alerta);background:#fff8f7}
+.ficha .selo{align-self:center;font-size:13px;font-weight:700;color:var(--marca);
+             background:var(--marca-clara);border-radius:6px;padding:6px 10px;white-space:nowrap}
+.ficha .selo.falta{color:var(--alerta);background:#fff1f0;font-weight:600}
+/* Com a ficha aberta, a barra de recados do topo fica ATRÁS do painel: quem
+   clicava "Aplicar" não via resposta nenhuma. O recado se repete aqui. */
+.ficha .recado{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;z-index:40;
+  background:#1a7f4b;color:#fff;padding:9px 15px;border-radius:8px;font-size:13px;
+  box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:80vw}
 .ficha .duplo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .ficha .trio{display:grid;grid-template-columns:1fr 90px 150px;gap:10px;align-items:end}
 .ficha textarea,.ficha input[type=text],.ficha input[type=date],.ficha input[type=number]{
@@ -357,7 +376,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
    que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
    minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
    olhando uma versao velha sem ter como saber. */
-const VERSAO = "2026-09-04-1659";
+const VERSAO = "2026-09-04-1753";
 
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
@@ -1116,6 +1135,21 @@ function aviso(texto) {
   const d = document.getElementById("dica");
   d.textContent = texto;
   setTimeout(resumo, 6000);
+
+  /* A barra de recados fica embaixo do painel da ficha. Sem repetir aqui,
+     quem aplica uma colagem com a ficha aberta não vê resposta nenhuma. */
+  const painel = document.getElementById("ficha");
+  if (!painel || painel.hidden) return;
+  let recado = painel.querySelector(".recado");
+  if (!recado) {
+    recado = document.createElement("div");
+    recado.className = "recado";
+    (painel.querySelector(".papel") || painel).appendChild(recado);
+  }
+  recado.textContent = texto;
+  recado.hidden = false;
+  clearTimeout(recado.relogio);
+  recado.relogio = setTimeout(() => { recado.hidden = true; }, 5000);
 }
 
 
@@ -1189,42 +1223,11 @@ function blocoFicha(titulo) {
   bloco.append(h, corpo);
   return bloco;
 }
-
 function rotuloSolto(texto) {
   const l = document.createElement("label");
   l.textContent = texto;
   l.style.marginTop = "6px";
   return l;
-}
-
-function entrada(p, chave, rotulo, tipo) {
-  const caixa = document.createElement("div");
-  const lab = document.createElement("label");
-  lab.textContent = rotulo;
-  const campo = document.createElement("input");
-  campo.type = tipo;
-  campo.value = p[chave] || "";
-  campo.oninput = () => {
-    p[chave] = campo.value;
-    salvarAdiado();
-    const topo = document.querySelector(".ficha .topo");
-    if (topo) {
-      topo.querySelector(".leito").textContent = p.leito || "—";
-      topo.querySelector(".nome").textContent = p.nome || "(sem nome)";
-      topo.querySelector(".dih").textContent = rotuloDih(p.internacao) || "D?IH";
-    }
-  };
-  caixa.append(lab, campo);
-  return caixa;
-}
-
-function avisoDih(p) {
-  const d = document.createElement("div");
-  d.className = "ajuda";
-  d.textContent = p.internacao
-    ? "DIH hoje: " + rotuloDih(p.internacao) + " — calculado da data de internação, não digitado."
-    : "Sem data de internação o DIH fica D?IH. Preencha uma vez e ele nunca mais erra.";
-  return d;
 }
 
 function renderFicha() {
@@ -1255,18 +1258,9 @@ function renderFicha() {
   const conteudo = document.createElement("div");
   conteudo.className = "conteudo";
 
-  const identLeito = document.createElement("div");
-  identLeito.className = "duplo";
-  identLeito.append(entrada(p, "leito", "Leito", "text"),
-                    entrada(p, "responsavel", "Responsável", "text"));
-  const ident = document.createElement("div");
-  ident.className = "trio";
-  ident.append(entrada(p, "nome", "Paciente", "text"),
-               entrada(p, "idade", "Idade", "number"),
-               entrada(p, "internacao", "Internou em", "date"));
-  conteudo.appendChild(blocoFicha("Colar do prontuário", blocoColar(p)));
+  conteudo.appendChild(blocoFicha("Identificação", blocoIdentidade(p)));
 
-  conteudo.appendChild(blocoFicha("Identificação", identLeito, ident, avisoDih(p)));
+  conteudo.appendChild(blocoFicha("Colar do prontuário", blocoColar(p)));
 
   conteudo.appendChild(blocoFicha("Caso",
     campoFicha(p, "problemas", "Problemas / diagnósticos ativos", 2),
@@ -1506,8 +1500,7 @@ function blocoColar(p) {
 
   const area = document.createElement("textarea");
   area.rows = 3;
-  area.placeholder = "302/1 Maria Luiza de Avelar, 82 anos\nInternada em 26/08\n" +
-    "Losartana 50mg 1-0-1\nCeftriaxona 1g EV 12/12h 26/08\n" +
+  area.placeholder = "Losartana 50mg 1-0-1\nCeftriaxona 1g EV 12/12h 26/08\n" +
     "04/09: Hb 9,4 | Ht 28,2 | Leuco 14050 | PCR 11,3";
 
   const previa = document.createElement("div");
@@ -1627,6 +1620,139 @@ function blocoColar(p) {
   caixa.append(explica, area, previa, acoes);
   atualizar();
   return caixa;
+}
+
+/* ==================================== identificação escrita numa linha só
+   "302/1 Maria Luiza de Avelar, 82 anos, internou 26/08" tem de virar quatro
+   campos separados. A DATA sai primeiro: se ficasse, "internou 26/08" viraria
+   sobrenome. Depois saem as palavras que só anunciam a data, e o que sobra vai
+   para a mesma leitura que já cria vários leitos de uma vez. */
+const PALAVRA_DE_ADMISSAO = /\b(internou em|internou|interna[cç][aã]o|internad[oa] em|internad[oa]|admitid[oa] em|admitid[oa]|admiss[aã]o|adm|desde|dih|entrada em|entrou em|entrou)\b/gi;
+
+function lerIdentidade(texto) {
+  const achado = acharDataNoTexto(texto);
+  const resto = (achado ? achado.texto : texto)
+    .replace(PALAVRA_DE_ADMISSAO, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/[\s,;/|-]+$/, "")
+    .trim();
+  const lido = lerLinhaDePaciente(resto) || { leito: "", nome: "", idade: "" };
+  return { leito: lido.leito, nome: lido.nome, idade: lido.idade,
+           internacao: achado ? achado.iso : "" };
+}
+
+/* O caminho de volta: o que está guardado vira de novo uma linha escrita, para
+   que corrigir um campo embaixo conserte a linha de cima. */
+function linhaDeIdentidade(p) {
+  let cabeca = ((p.leito ? p.leito + " " : "") + (p.nome || "")).trim();
+  const cauda = [];
+  if (p.idade) cauda.push(p.idade + " anos");
+  if (p.internacao) cauda.push("internou " + diaMes(p.internacao));
+  return (cabeca + (cauda.length ? (cabeca ? ", " : "") + cauda.join(", ") : "")).trim();
+}
+
+function diaMes(iso) {
+  const partes = (iso || "").split("-");
+  return partes.length === 3 ? partes[2] + "/" + partes[1] : "";
+}
+
+function blocoIdentidade(p) {
+  const caixa = document.createElement("div");
+
+  const livre = document.createElement("div");
+  livre.className = "linha-livre";
+  const rot = document.createElement("label");
+  rot.textContent = "Escreva o paciente numa linha só";
+  const linha = document.createElement("input");
+  linha.type = "text";
+  linha.value = linhaDeIdentidade(p);
+  linha.placeholder = "302/1 Maria Luiza de Avelar, 82 anos, internou 26/08";
+  livre.append(rot, linha);
+
+  const entendi = document.createElement("div");
+  entendi.className = "entendi";
+
+  const campos = {};
+  const curto = (chave, rotulo, tipo, classe) => {
+    const div = document.createElement("div");
+    div.className = classe || "";
+    const l = document.createElement("label");
+    l.textContent = rotulo;
+    const campo = document.createElement("input");
+    campo.type = tipo;
+    campo.value = p[chave] || "";
+    campo.oninput = () => {
+      p[chave] = campo.value;
+      if (document.activeElement !== linha) linha.value = linhaDeIdentidade(p);
+      pintar();
+      atualizarTopo(p);
+      salvarAdiado();
+      renderFolhasAdiado();
+    };
+    div.append(l, campo);
+    campos[chave] = { div: div, campo: campo };
+    entendi.appendChild(div);
+    return div;
+  };
+
+  curto("leito", "Leito", "text", "curto");
+  curto("nome", "Paciente", "text", "cresce");
+  curto("idade", "Idade", "number", "curto");
+  curto("internacao", "Internou em", "date", "data");
+
+  const selo = document.createElement("span");
+  selo.className = "selo";
+  entendi.appendChild(selo);
+
+  curto("responsavel", "Responsável", "text", "cresce");
+
+  const pintar = () => {
+    Object.keys(campos).forEach(chave => {
+      const vago = !p[chave] && chave !== "responsavel";
+      campos[chave].div.classList.toggle("vago", vago);
+    });
+    const r = rotuloDih(p.internacao);
+    selo.textContent = r || "falta a data";
+    selo.className = "selo" + (r ? "" : " falta");
+  };
+
+  linha.oninput = () => {
+    const lido = lerIdentidade(linha.value);
+    p.leito = lido.leito;
+    p.nome = lido.nome;
+    p.idade = lido.idade;
+    // A data só é escrita quando aparece no texto: no meio da digitação a
+    // linha passa por estados sem data, e apagar a internação por causa disso
+    // seria apagar o DIH de quem já estava certo. Para tirar, use o campo.
+    if (lido.internacao) p.internacao = lido.internacao;
+    ["leito", "nome", "idade", "internacao"].forEach(chave => {
+      campos[chave].campo.value = p[chave] || "";
+    });
+    pintar();
+    atualizarTopo(p);
+    salvarAdiado();
+    renderFolhasAdiado();
+  };
+
+  const ajuda = document.createElement("div");
+  ajuda.className = "ajuda";
+  ajuda.style.marginTop = "8px";
+  ajuda.textContent = "Escreva na linha de cima e leito, nome, idade e data se separam sozinhos — " +
+    "\u201cinternou\u201d, \u201cadm\u201d ou a data solta valem igual. Os campos embaixo mostram o que " +
+    "eu entendi e podem ser corrigidos; o DIH é calculado, nunca digitado.";
+
+  pintar();
+  caixa.append(livre, entendi, ajuda);
+  return caixa;
+}
+
+/* O cabeçalho roxo da ficha acompanha o que está sendo digitado. */
+function atualizarTopo(p) {
+  const topo = document.querySelector(".ficha .topo");
+  if (!topo) return;
+  topo.querySelector(".leito").textContent = p.leito || "\u2014";
+  topo.querySelector(".nome").textContent = p.nome || "(sem nome)";
+  topo.querySelector(".dih").textContent = rotuloDih(p.internacao) || "D?IH";
 }
 
 function abrirVarios() {
