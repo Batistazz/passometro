@@ -289,6 +289,37 @@ const FOLHAO_URL = "https://batistazz.github.io/gama/";
 // Verificado publicando duas páginas em caminhos diferentes do mesmo host:
 // a segunda leu o que a primeira gravou.
 const FOLHAO_CHAVE = "folhao_v2";
+
+/* Abreviações tiradas da PRÓPRIA planilha do passômetro, não inventadas:
+   é assim que a equipe já escreve ("Hb 14,2 | Ht 41,6 | Plaq 149.300 |
+   PCR 74,36 | Na 137,9 | K 3,70 | Creat 1,35"). O folhão entrega o nome por
+   extenso; aqui ele encurta, porque "Hemoglobina" repetido em treze pacientes
+   rouba a largura que o resultado precisa na folha.
+
+   Exame que não estiver nesta lista sai com o nome inteiro — abreviação
+   adivinhada num documento clínico é risco, não economia. */
+const ABREVIACAO = {
+  hemoglobina: "Hb", hematocrito: "Ht", hemacias: "Hem", leucocitos: "Leuco",
+  plaquetas: "Plaq", bastoes: "Bast", neutrofilos: "Neut", segmentados: "Seg",
+  linfocitos: "Linf", monocitos: "Mon", eosinofilos: "Eos", basofilos: "Bas",
+  vcm: "VCM", hcm: "HCM", chcm: "CHCM", rdw: "RDW", vpm: "VPM",
+  ureia: "Ureia", creatinina: "Creat",
+  sodio: "Na", potassio: "K", cloro: "Cl", calcio: "Ca", magnesio: "Mg",
+  fosforo: "P", glicose: "Glic",
+  pcr: "PCR", vhs: "VHS", ldh: "LDH", acido_urico: "Ác. úrico",
+  ast: "TGO", alt: "TGP", ggt: "GGT", fosfatase_alcalina: "FA",
+  bilirrubina_total: "BT", bilirrubina_direta: "BD", bilirrubina_indireta: "BI",
+  proteinas_totais: "Prot", albumina: "Alb",
+  tp: "TP", inr: "RNI", ttpa: "PTTa", fibrinogenio: "Fibrin",
+  ph: "pH", pco2: "pCO2", po2: "pO2", hco3: "HCO3", tco2: "CO2t",
+  be: "BE", sato2: "SatO2", anion_gap: "AG", lactato: "Lac",
+  amilase: "Amilase", lipase: "Lipase", cpk: "CPK", ckmb: "CKMB",
+  troponina_i: "Troponina"
+};
+
+function nomeCurto(chave, porExtenso) {
+  return ABREVIACAO[chave] || porExtenso || chave || "?";
+}
 const POR_FOLHA = 3;          // pacientes por folha A4 paisagem
 const CAMPOS_TEXTO = ["problemas", "caso", "exames", "hoje", "pendencias"];
 
@@ -973,8 +1004,9 @@ function blocosDoFolhao(banco) {
     const valor = o.value_text || (o.value_numeric != null ? String(o.value_numeric) : "");
     if (!valor) return;
     const dia = String(o.collection_datetime).slice(0, 10);
-    const nome = o.exam_name_original || o.exam_name_normalized || "?";
-    (enc.datas[dia] = enc.datas[dia] || []).push(nome + " " + valor + (o.unit ? " " + o.unit : ""));
+    // Sem unidade e com o nome curto: quem lê já sabe que hemoglobina é g/dL.
+    const nome = nomeCurto(o.exam_name_normalized, o.exam_name_original);
+    (enc.datas[dia] = enc.datas[dia] || []).push(nome + " " + valor);
   });
 
   return Object.keys(encontros)
