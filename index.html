@@ -376,7 +376,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
    que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
    minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
    olhando uma versao velha sem ter como saber. */
-const VERSAO = "2026-09-04-1828";
+const VERSAO = "2026-09-04-1851";
 
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
@@ -857,13 +857,13 @@ function renderFolhas() {
   }
 
   const folhas = paginarPorAltura(lista, agora, carimbo);
-  folhas.forEach((grupo, i) => {
+  folhas.forEach((pagina, i) => {
     const folha = document.createElement("section");
     folha.className = "folha";
     folha.append(cabecalhoDaFolha(agora, carimbo, i + 1, folhas.length, lista.length));
-    const tabela = tabelaDaFolha();
+    const tabela = tabelaDaFolha(pagina.larguras);
     const corpo = document.createElement("tbody");
-    grupo.forEach(p => {
+    pagina.grupo.forEach(p => {
       corpo.appendChild(linhaImpressa(p));
       corpo.appendChild(linhaManuscrita(8));
     });
@@ -873,29 +873,85 @@ function renderFolhas() {
   });
 }
 
-/* Quantos pacientes cabem numa folha depende do quanto cada um tem escrito.
-   Contar 3 fixos cortava o paciente cheio e desperdiçava a folha do paciente
-   vazio. Aqui o navegador MEDE cada bloco antes de paginar: entram quantos
-   couberem, com o mínimo de dois — o bloco é limitado a meia folha, então
-   dois sempre cabem. */
+/* Quantos pacientes cabem numa folha depende do quanto cada um tem escrito,
+   E de como a largura foi repartida entre as colunas daquela folha. As duas
+   coisas se puxam: coluna mais larga é célula mais baixa, célula mais baixa é
+   mais paciente na folha. Por isso a folha é montada e MEDIDA a cada paciente
+   que entra — o navegador responde a altura de verdade, não uma estimativa. */
 const PX_POR_MM = 96 / 25.4;
 const ALTURA_UTIL_MM = 194;   // A4 paisagem (210mm) menos 8mm de margem em cima e embaixo
 
-function paginarPorAltura(lista, agora, carimbo) {
+/* Mínimo garantido de cada coluna (soma 59%) e teto para nenhuma engolir a
+   folha. O leito não cresce: número de leito é curto sempre. */
+const LARGURA_MINIMA = [6, 12, 7, 7, 7, 7, 7, 6];
+const LARGURA_MAXIMA = [6, 32, 34, 34, 34, 20, 42, 30];
+
+function massaDaColuna(p) {
+  const meds = (p.medicacoes || []).map(m => m.texto || "").join(" ");
+  const atbs = (p.atbs || []).map(a => a.texto || "").join(" ");
+  return [0,
+          (p.nome || "").length + meds.length + 14,
+          (p.problemas || "").length,
+          (p.caso || "").length,
+          (p.exames || "").length,
+          atbs.length + (atbs ? 10 : 0),
+          (p.hoje || "").length,
+          (p.pendencias || "").length];
+}
+
+function largurasDaFolha(grupo) {
+  const massa = [0, 0, 0, 0, 0, 0, 0, 0];
+  grupo.forEach(p => massaDaColuna(p).forEach((n, i) => { massa[i] += n; }));
+  const total = massa.reduce((a, b) => a + b, 0);
+  const larguras = LARGURA_MINIMA.slice();
+  let sobra = 100 - LARGURA_MINIMA.reduce((a, b) => a + b, 0);
+
+  if (total > 0) {
+    let devolvido = 0;
+    for (let i = 1; i < 8; i++) {
+      const pedido = larguras[i] + sobra * massa[i] / total;
+      const dado = Math.min(LARGURA_MAXIMA[i], pedido);
+      devolvido += pedido - dado;      // o que o teto recusou
+      larguras[i] = dado;
+    }
+    // O recusado volta para quem ainda tem folga, na mesma proporção.
+    if (devolvido > 0.01) {
+      const folga = larguras.map((l, i) => i ? Math.max(0, LARGURA_MAXIMA[i] - l) : 0);
+      const somaFolga = folga.reduce((a, b) => a + b, 0);
+      if (somaFolga > 0)
+        for (let i = 1; i < 8; i++) larguras[i] += devolvido * folga[i] / somaFolga;
+    }
+  }
+  const soma = larguras.reduce((a, b) => a + b, 0);
+  return larguras.map(x => (100 * x / soma).toFixed(1) + "%");
+}
+
+/* Acima deste ponto do orçamento a folha está apertada e vale redistribuir a
+   largura; abaixo, a largura de sempre cabe e é a que fica. */
+const APERTO = 0.70;
+
+/* Mede com a largura de sempre; se apertar, mede de novo repartindo. */
+function medirFolha(grupo, agora, carimbo, quantos) {
+  const padrao = medirComLargura(grupo, agora, carimbo, quantos, LARGURA_PADRAO);
+  if (padrao.altura <= padrao.orcamento * APERTO) return padrao;
+  const repartido = medirComLargura(grupo, agora, carimbo, quantos, largurasDaFolha(grupo));
+  // Repartir podia, em tese, piorar: fica o menor dos dois.
+  return repartido.altura <= padrao.altura ? repartido : padrao;
+}
+
+function medirComLargura(grupo, agora, carimbo, quantos, larguras) {
   const medidor = document.createElement("div");
   medidor.className = "passometro folha-a4";
   medidor.style.cssText = "position:absolute;left:-99999px;top:0;width:281mm;visibility:hidden";
   const folha = document.createElement("section");
   folha.className = "folha";
   folha.style.height = "auto";
-  const cabecalho = cabecalhoDaFolha(agora, carimbo, 1, 1, lista.length);
-  const tabela = tabelaDaFolha();
+  const cabecalho = cabecalhoDaFolha(agora, carimbo, 1, 1, quantos);
+  const tabela = tabelaDaFolha(larguras);
   const corpo = document.createElement("tbody");
-  const pares = lista.map(p => {
-    const dados_ = linhaImpressa(p);
-    const manus = linhaManuscrita(8);
-    corpo.append(dados_, manus);
-    return [dados_, manus];
+  grupo.forEach(p => {
+    corpo.appendChild(linhaImpressa(p));
+    corpo.appendChild(linhaManuscrita(8));
   });
   tabela.appendChild(corpo);
   folha.append(cabecalho, tabela);
@@ -904,38 +960,49 @@ function paginarPorAltura(lista, agora, carimbo) {
 
   const alturaCabecalho = cabecalho.getBoundingClientRect().height;
   const alturaTitulos = tabela.querySelector("thead").getBoundingClientRect().height;
-  const alturas = pares.map(([a, b]) =>
-    a.getBoundingClientRect().height + b.getBoundingClientRect().height);
+  const alturaCorpo = corpo.getBoundingClientRect().height;
   document.body.removeChild(medidor);
 
-  // 0,92 e' margem de seguranca: a medida na tela e' um pouco mais generosa
-  // que a caixa real da impressao, e sem ela a folha transbordava e saia
-  // pagina em branco. Calibrado contra os 13 pacientes reais.
-  const orcamento = (ALTURA_UTIL_MM * PX_POR_MM - alturaCabecalho - alturaTitulos) * 0.92;
-  const folhas = [];
-  let atual = [], gasto = 0;
-  lista.forEach((p, i) => {
-    const altura = alturas[i] || 0;
-    // Cabe? Entra. Não cabe? Vai para a folha seguinte, inteiro.
-    //
-    // Antes havia uma regra de mínimo dois por folha. Ela fazia sentido quando
-    // o texto era limitado, mas agora que nada é cortado, forçar o segundo
-    // paciente estourava a folha e saía página EM BRANCO. Entre gastar papel e
-    // esconder texto clínico, o papel é o que cede.
-    if (atual.length && gasto + altura > orcamento) {
-      folhas.push(atual);
-      atual = []; gasto = 0;
-    }
-    atual.push(p);
-    gasto += altura;
-  });
-  if (atual.length) folhas.push(atual);
+  // 0,92 é margem de segurança: a medida na tela é um pouco mais generosa que
+  // a caixa real da impressão, e sem ela a folha transbordava e saía página em
+  // branco. Calibrado contra a enfermaria real.
+  return {
+    altura: alturaCorpo,
+    orcamento: (ALTURA_UTIL_MM * PX_POR_MM - alturaCabecalho - alturaTitulos) * 0.92,
+    larguras: larguras
+  };
+}
 
-  // Paciente cujo bloco sozinho nao cabe numa folha: ele transborda, e a
-  // pagina seguinte sai sem cabecalho. Nada e' cortado — mas quem imprime
-  // precisa saber onde esta o excesso para poder encurtar, se quiser.
-  naoCabem = lista.filter((p, i) => (alturas[i] || 0) > orcamento)
-                  .map(p => p.leito || p.nome || "sem leito");
+function paginarPorAltura(lista, agora, carimbo) {
+  const folhas = [];
+  naoCabem = [];
+  let i = 0;
+  while (i < lista.length) {
+    let grupo = [lista[i]];
+    let medida = medirFolha(grupo, agora, carimbo, lista.length);
+
+    // Paciente cujo bloco sozinho não cabe: ele transborda e a página seguinte
+    // sai sem cabeçalho. Nada é cortado — mas quem imprime precisa saber onde
+    // está o excesso para poder encurtar, se quiser.
+    if (medida.altura > medida.orcamento) {
+      naoCabem.push(lista[i].leito || lista[i].nome || "sem leito");
+      folhas.push({ grupo: grupo, larguras: medida.larguras });
+      i += 1;
+      continue;
+    }
+
+    let j = i + 1;
+    while (j < lista.length) {
+      const tentativa = grupo.concat([lista[j]]);
+      const nova = medirFolha(tentativa, agora, carimbo, lista.length);
+      if (nova.altura > nova.orcamento) break;
+      grupo = tentativa;
+      medida = nova;
+      j += 1;
+    }
+    folhas.push({ grupo: grupo, larguras: medida.larguras });
+    i = j;
+  }
   return folhas;
 }
 
@@ -954,16 +1021,18 @@ function cabecalhoDaFolha(agora, carimbo, numero, total, pacientes) {
   return titulo;
 }
 
-function tabelaDaFolha() {
+const TITULOS_DA_FOLHA = ["Leito", "Paciente · DIH · medicações", "Problemas ativos",
+  "HPP · alergias · HMA", "Exames", "Antimicrobianos", "Hoje", "Pendências"];
+const LARGURA_PADRAO = ["6%", "19%", "13%", "16%", "14%", "11%", "12%", "9%"];
+
+function tabelaDaFolha(larguras) {
   const tabela = document.createElement("table");
   const cabecalho = document.createElement("thead");
   const linha = document.createElement("tr");
-  [["Leito", "6%"], ["Paciente · DIH · medicações", "19%"], ["Problemas ativos", "13%"],
-   ["HPP · alergias · HMA", "16%"], ["Exames", "14%"],
-   ["Antimicrobianos", "11%"], ["Hoje", "12%"], ["Pendências", "9%"]]
-    .forEach(([nome, largura]) => {
+  TITULOS_DA_FOLHA.forEach((nome, i) => {
       const th = document.createElement("th");
-      th.textContent = nome; th.style.width = largura;
+      th.textContent = nome;
+      th.style.width = (larguras || LARGURA_PADRAO)[i];
       linha.appendChild(th);
     });
   cabecalho.appendChild(linha);
