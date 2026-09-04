@@ -97,6 +97,32 @@ td.acoes{width:34px;text-align:center;background:#fff}
 td.acoes button{color:var(--fraca);border-color:var(--linha);padding:2px 6px;font-size:12px}
 td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--alerta)}
 
+/* -------------------------------------------------- celular: lista
+   A grade tem 1860px. Num celular vira rolagem horizontal sem fim e editar
+   ali e' inviavel. Em tela estreita ela da' lugar a uma lista: toca no
+   paciente e abre a ficha, que e' onde se escreve. A grade continua sendo
+   o que imprime. */
+.lista-mini{display:none}
+@media (max-width:820px){
+  .rolagem{display:none}
+  .lista-mini{display:block;padding:8px}
+  .barra{gap:6px}
+  .barra button{padding:6px 9px;font-size:12px}
+}
+.cartao-mini{background:#fff;border:1px solid var(--linha);border-radius:10px;
+             padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;
+             align-items:center;cursor:pointer;text-align:left;width:100%;
+             font:inherit;color:inherit}
+.cartao-mini:active{background:var(--marca-clara)}
+.cartao-mini .leito{font-weight:700;font-size:19px;min-width:64px;color:var(--marca)}
+.cartao-mini .meio{flex:1;min-width:0}
+.cartao-mini .nome{font-weight:700;text-transform:uppercase;font-size:13px;
+                   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cartao-mini .sub{font-size:12px;color:var(--fraca);margin-top:2px;
+                  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cartao-mini .dih{font-weight:700;font-size:13px}
+.cartao-mini .aviso{color:var(--alerta);font-weight:600}
+.cartao-mini .seta{color:var(--fraca);font-size:18px}
 .vazio{padding:0;background:#fff;border:1px solid var(--linha);border-radius:10px;
        max-width:760px;margin:26px auto;overflow:hidden}
 .vazio h2{margin:0;padding:16px 22px;background:var(--marca-clara);color:var(--marca);
@@ -149,8 +175,12 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
 .ficha .item input.txt{flex:1 1 auto}
 .ficha .item .data{width:140px;border:1px solid var(--linha);border-radius:5px;padding:4px 6px}
 .ficha .item .dia{min-width:44px;font-size:13px}
-td.leito button.abrir{width:100%;border:0;background:none;color:var(--marca);
-       font:inherit;font-weight:700;font-size:15px;padding:6px 2px;cursor:pointer;border-radius:4px}
+/* A celula inteira abre o paciente. Antes o botao era uma barra de 6px no
+   topo de uma celula que pode ter 200px: era preciso mirar. */
+td.leito{padding:0}
+td.leito button.abrir{width:100%;height:100%;min-height:40px;border:0;background:none;
+       color:var(--marca);font:inherit;font-weight:700;font-size:15px;padding:6px 2px;
+       cursor:pointer;border-radius:4px;vertical-align:top}
 td.leito button.abrir:hover{background:var(--marca-clara)}
 td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 /* --------------------------------------------------- painel do folhão */
@@ -240,6 +270,8 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 </div>
 
 <div class="dica" id="dica"></div>
+
+<div class="lista-mini" id="listaMini"></div>
 
 <div class="rolagem">
   <table id="grade">
@@ -405,6 +437,48 @@ function diasDesde(iso) {
 // D0 no dia da admissão e no dia em que o antimicrobiano começa, como o
 // passômetro do serviço sempre escreveu.
 function rotuloDih(iso) { const n = diasDesde(iso); return n === null ? "" : "D" + n + "IH"; }
+/* Data escrita junto do nome da droga: "Ceftriaxona 1g EV 12/12h 26/08".
+   O 12/12h e' FREQUENCIA, nao data — por isso a expressao recusa o que vier
+   seguido de "h", e recusa tambem data no futuro. Na duvida nao devolve nada:
+   errar a data de inicio erra o dia de tratamento, que e' justamente o que
+   este sistema existe para acertar. */
+const DATA_NO_TEXTO = /(?:^|[\s(\[,;])(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?(?![\s]*[h:\/\d])/g;
+
+function acharDataNoTexto(texto) {
+  const hj = hoje();
+  let melhor = null;
+  DATA_NO_TEXTO.lastIndex = 0;
+  let m;
+  while ((m = DATA_NO_TEXTO.exec(texto)) !== null) {
+    const dia = Number(m[1]), mes = Number(m[2]);
+    if (dia < 1 || dia > 31 || mes < 1 || mes > 12) continue;
+    let ano = m[3] ? Number(m[3]) : hj.getFullYear();
+    if (ano < 100) ano += 2000;
+    const d = new Date(ano, mes - 1, dia);
+    if (d.getMonth() !== mes - 1 || d.getDate() !== dia) continue;   // 31/02
+    if (d > hj) {
+      if (m[3]) continue;                    // ano escrito e no futuro: recusa
+      d.setFullYear(ano - 1);                // sem ano, provavelmente e do ano passado
+      if (d > hj) continue;
+    }
+    // Antimicrobiano nao corre ha' meses. Data muito velha quase sempre e'
+    // outra coisa lida por engano; na duvida, nao preenche.
+    if ((hj - d) / 86400000 > 90) continue;
+    melhor = { data: d, inicio: m.index + m[0].indexOf(m[1]), tamanho: m[0].length - m[0].indexOf(m[1]) };
+  }
+  if (!melhor) return null;
+  const iso = melhor.data.getFullYear() + "-" +
+    String(melhor.data.getMonth() + 1).padStart(2, "0") + "-" +
+    String(melhor.data.getDate()).padStart(2, "0");
+  const limpo = (texto.slice(0, melhor.inicio) + texto.slice(melhor.inicio + melhor.tamanho))
+    .replace(/\s{2,}/g, " ")
+    .replace(/[\s(\[,;-]+$/, "")
+    // "desde 29/08" deixava o "desde" pendurado no fim.
+    .replace(/\s+(desde|em|no dia|dia|a partir de|inicio|início)$/i, "")
+    .trim();
+  return { iso: iso, texto: limpo };
+}
+
 function rotuloDia(iso) { const n = diasDesde(iso); return n === null ? null : "D" + n; }
 
 /* --------------------------------------------------------- paciente */
@@ -448,8 +522,49 @@ function render() {
   document.getElementById("grade").hidden = dados.pacientes.length === 0;
 
   dados.pacientes.forEach(p => corpo.appendChild(linhaDoPaciente(p)));
+  renderListaMini();
   renderFolhas();
   resumo();
+}
+
+/* A mesma enfermaria, do jeito que cabe num celular. */
+function renderListaMini() {
+  const alvo = document.getElementById("listaMini");
+  alvo.textContent = "";
+  dados.pacientes.forEach(p => {
+    const cartao = document.createElement("button");
+    cartao.className = "cartao-mini";
+    cartao.onclick = () => abrirFicha(p.id);
+
+    const leito = document.createElement("span");
+    leito.className = "leito";
+    leito.textContent = p.leito || "—";
+
+    const meio = document.createElement("span");
+    meio.className = "meio";
+    const nome = document.createElement("div");
+    nome.className = "nome";
+    nome.textContent = p.nome || "(sem nome)";
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    const pedacos = [];
+    if (p.idade) pedacos.push(p.idade + "a");
+    if (p.problemas) pedacos.push(p.problemas.split("\n")[0]);
+    sub.textContent = pedacos.join(" · ") || "sem problemas anotados";
+    meio.append(nome, sub);
+
+    const dih = document.createElement("span");
+    const rotulo = rotuloDih(p.internacao);
+    dih.className = "dih" + (rotulo ? "" : " aviso");
+    dih.textContent = rotulo || "sem data";
+
+    const seta = document.createElement("span");
+    seta.className = "seta";
+    seta.textContent = "›";
+
+    cartao.append(leito, meio, dih, seta);
+    alvo.appendChild(cartao);
+  });
 }
 
 function linhaDoPaciente(p) {
@@ -567,8 +682,24 @@ function listaDeItens(p, chave) {
     const texto = document.createElement("input");
     texto.className = "txt";
     texto.value = item.texto || "";
-    texto.placeholder = eAtb ? "droga, dose, via" : "medicação, dose, via";
-    texto.oninput = () => { item.texto = texto.value; salvarAdiado(); };
+    texto.placeholder = eAtb ? "droga, dose, via e a data de início"
+                         : "medicação, dose, via";
+    texto.oninput = () => {
+      item.texto = texto.value;
+      // No antimicrobiano, a data escrita junto do nome vira data de início.
+      // Só quando ainda não há uma: preenchida à mão, ela manda.
+      if (eAtb && !item.inicio) {
+        const achado = acharDataNoTexto(texto.value);
+        if (achado) {
+          item.inicio = achado.iso;
+          item.texto = achado.texto;
+          salvar();
+          if (fichaAberta) renderFicha(); else render();
+          return;
+        }
+      }
+      salvarAdiado();
+    };
 
     /* Colar um bloco do prontuário vira uma linha por item, em vez de tudo
        espremido num campo só. Nada é interpretado: cada linha entra como
@@ -1068,6 +1199,7 @@ function renderFicha() {
   const espaco = document.createElement("span"); espaco.className = "espaco";
   const fechar = document.createElement("button");
   fechar.textContent = "Voltar à enfermaria";
+  fechar.title = "Ou clique fora, ou aperte Esc";
   fechar.onclick = fecharFicha;
   topo.append(leito, nome, dih, espaco, fechar);
 
@@ -1184,6 +1316,7 @@ function abrirVarios() {
   const espaco = document.createElement("span"); espaco.className = "espaco";
   const fechar = document.createElement("button");
   fechar.textContent = "Cancelar";
+  fechar.title = "Ou clique fora, ou aperte Esc";
   fechar.onclick = () => { alvo.hidden = true; };
   topo.append(titulo, espaco, fechar);
 
@@ -1341,6 +1474,7 @@ function abrirFolhao() {
   const espaco = document.createElement("span"); espaco.className = "espaco";
   const fechar = document.createElement("button");
   fechar.textContent = "Voltar à enfermaria";
+  fechar.title = "Ou clique fora, ou aperte Esc";
   fechar.onclick = () => { alvo.hidden = true; };
   topo.append(titulo, espaco, fechar);
 
@@ -1514,6 +1648,22 @@ function medirBarra() {
 }
 window.addEventListener("resize", medirBarra);
 medirBarra();
+
+/* Sair de um painel nao pode depender de achar o botao. Clique no fundo
+   escuro e Esc fecham; clique DENTRO nao fecha. O que estava sendo digitado
+   ja foi salvo a cada tecla. */
+function fecharPainel() {
+  const painel = document.getElementById("ficha");
+  if (painel.hidden) return false;
+  if (fichaAberta) { fecharFicha(); } else { painel.hidden = true; salvar(); render(); }
+  return true;
+}
+document.getElementById("ficha").addEventListener("mousedown", evento => {
+  if (evento.target.id === "ficha") fecharPainel();   // so o fundo, nao o papel
+});
+document.addEventListener("keydown", evento => {
+  if (evento.key === "Escape") fecharPainel();
+});
 
 window.addEventListener("beforeprint", renderFolhas);
 render();
