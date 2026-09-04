@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8><body style="font:26px Arial;padding:24px">
+<div id=r>...</div><script>
+const v = localStorage.getItem("teste_origem");
+const el = document.getElementById("r");
+el.textContent = v ? "PASSA: outro caminho leu -> " + v : "FALHA: caminho diferente NAO compartilha";
+el.style.color = v ? "green" : "red";
+</script></body>
