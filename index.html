@@ -317,6 +317,18 @@ const ABREVIACAO = {
   troponina_i: "Troponina"
 };
 
+/* Serie branca imatura e celula atipica zeradas nao informam nada e enchem a
+   linha. Ficam de fora QUANDO SAO ZERO; se vierem com valor, entram normal —
+   blasto 3 muda a conduta na hora. */
+const ZERO_SEM_VALOR = ["metamielocitos", "mielocitos", "promielocitos",
+                        "blastos", "celulas_atipicas", "linfocitos_reativos"];
+
+function vaiParaOPapel(chave, valorNumerico, valorTexto) {
+  if (ZERO_SEM_VALOR.indexOf(chave) < 0) return true;
+  const n = valorNumerico != null ? valorNumerico : parseFloat(String(valorTexto).replace(",", "."));
+  return !(n === 0);
+}
+
 function nomeCurto(chave, porExtenso) {
   return ABREVIACAO[chave] || porExtenso || chave || "?";
 }
@@ -1004,6 +1016,7 @@ function blocosDoFolhao(banco) {
     const valor = o.value_text || (o.value_numeric != null ? String(o.value_numeric) : "");
     if (!valor) return;
     const dia = String(o.collection_datetime).slice(0, 10);
+    if (!vaiParaOPapel(o.exam_name_normalized, o.value_numeric, valor)) return;
     // Sem unidade e com o nome curto: quem lê já sabe que hemoglobina é g/dL.
     const nome = nomeCurto(o.exam_name_normalized, o.exam_name_original);
     (enc.datas[dia] = enc.datas[dia] || []).push(nome + " " + valor);
