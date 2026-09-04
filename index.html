@@ -1114,35 +1114,6 @@ function selecionar(caixa, acao) {
   acao.textContent = "selecionado — aperte Ctrl+C";
 }
 
-/* =============================================== exames vindos do folhão
-   O folhão (Gama) é quem lê o laudo; aqui só recebemos o resultado pronto.
-   O arquivo é o backup dele. O casamento é por LEITO, e nada entra sem você
-   ver antes o que vai mudar. */
-/* Caminho normal: o folhão foi usado NESTE navegador, então o banco dele
-   está ao alcance e não há arquivo nenhum para abrir. O arquivo continua
-   existindo como saída para quem importou os laudos noutro computador. */
-function puxarDoFolhao() {
-  let bruto = null;
-  try { bruto = localStorage.getItem(FOLHAO_CHAVE); } catch (e) {}
-  if (bruto) {
-    try {
-      aplicarFolhao(JSON.parse(bruto));
-      return;
-    } catch (erro) {
-      aviso("Achei o folhão neste navegador, mas não consegui ler: " + erro.message);
-      return;
-    }
-  }
-  if (confirm(
-      "Não achei o folhão NESTE navegador." + "\n\n" +
-      "O folhão guarda os exames na máquina onde você importou os laudos. " +
-      "Se foi noutro computador, abra o folhão lá, use Backup, e traga o arquivo." +
-      "\n\n" +
-      "Quer escolher o arquivo de backup do folhão agora?")) {
-    document.getElementById("folhaoArq").click();
-  }
-}
-
 function importarFolhao(evento) {
   const arquivo = evento.target.files[0];
   if (!arquivo) return;
@@ -1173,61 +1144,6 @@ function guardarFolhaoDoArquivo(pacote) {
   aviso(banco.observations.length + " resultado(s) do folhão carregados do arquivo.");
 }
 
-function aplicarFolhao(pacote) {
-  const banco = (pacote && pacote.db) || pacote;
-  if (!banco || !Array.isArray(banco.observations)) {
-    aviso("Esse arquivo não é um backup do folhão (falta a lista de observações).");
-    return;
-  }
-  const leitoDoEncontro = {};
-  (banco.encounters || []).forEach(e => { leitoDoEncontro[e.id] = String(e.bed || "").trim(); });
-
-  const porLeito = {};
-  banco.observations.forEach(o => {
-    const leito = leitoDoEncontro[o.encounter_id];
-    if (!leito || !o.collection_datetime) return;
-    const dia = String(o.collection_datetime).slice(0, 10);
-    const valor = o.value_text || (o.value_numeric != null ? String(o.value_numeric) : "");
-    if (!valor) return;
-    const nome = o.exam_name_original || o.exam_name_normalized || "?";
-    porLeito[leito] = porLeito[leito] || {};
-    porLeito[leito][dia] = porLeito[leito][dia] || [];
-    porLeito[leito][dia].push(nome + " " + valor + (o.unit ? " " + o.unit : ""));
-  });
-
-  const casados = [], semDono = [];
-  Object.keys(porLeito).forEach(leito => {
-    const paciente = dados.pacientes.find(p => String(p.leito || "").trim() === leito);
-    const dias = Object.keys(porLeito[leito]).sort().slice(-3);
-    const texto = dias.map(d =>
-      d.slice(8, 10) + "/" + d.slice(5, 7) + ": " + porLeito[leito][d].join(" | ")
-    ).join("\n");
-    const total = dias.reduce((n, d) => n + porLeito[leito][d].length, 0);
-    if (paciente) casados.push({ paciente: paciente, leito: leito, texto: texto, total: total, dias: dias.length });
-    else semDono.push(leito + " (" + total + " resultado(s))");
-  });
-
-  if (!casados.length) {
-    aviso("Nenhum leito do folhão bate com os leitos daqui." +
-          (semDono.length ? " No arquivo há: " + semDono.join(", ") : ""));
-    return;
-  }
-
-  const resumo = casados.map(c =>
-    "  " + c.leito + " — " + (c.paciente.nome || "sem nome") + ": " +
-    c.total + " resultado(s) em " + c.dias + " data(s)").join("\n");
-  const perdidos = semDono.length
-    ? "\n\nSem paciente aqui (nada será feito com estes):\n  " + semDono.join("\n  ") : "";
-  if (!confirm("O folhão traz exames para estes leitos:\n\n" + resumo + perdidos +
-               "\n\nIsto SUBSTITUI o texto de exames destes pacientes. Continuar?")) return;
-
-  casados.forEach(c => { c.paciente.exames = c.texto; });
-  salvar(); render();
-  if (fichaAberta) renderFicha();
-  aviso(casados.length + " leito(s) receberam exames do folhão." +
-        (semDono.length ? " " + semDono.length + " leito(s) do arquivo não têm paciente aqui." : ""));
-}
-
 /* Sem isto, um erro morre no console e a tela fica igual — foi exatamente
    assim que "não aconteceu absolutamente nada" aconteceu. */
 function mostrarFalha(mensagem) {
@@ -1238,6 +1154,18 @@ function mostrarFalha(mensagem) {
 window.addEventListener("error", e => mostrarFalha(e.message || "erro desconhecido"));
 window.addEventListener("unhandledrejection", e =>
   mostrarFalha((e.reason && e.reason.message) || "falha numa operação"));
+
+/* A faixa de aviso gruda logo abaixo da barra. A altura da barra muda com a
+   largura da tela (no celular ela quebra em duas linhas), então é medida, não
+   chutada. */
+function medirBarra() {
+  const barra = document.querySelector(".barra");
+  if (barra) {
+    document.documentElement.style.setProperty("--altura-barra", barra.offsetHeight + "px");
+  }
+}
+window.addEventListener("resize", medirBarra);
+medirBarra();
 
 window.addEventListener("beforeprint", renderFolhas);
 render();
