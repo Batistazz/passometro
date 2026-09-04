@@ -192,7 +192,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
   <button class="forte" onclick="salvarArquivo()">Backup (salvar arquivo)</button>
   <button onclick="document.getElementById('arq').click()">Abrir arquivo</button>
   <input type="file" id="arq" accept=".json" hidden onchange="abrirArquivo(event)">
-  <button onclick="document.getElementById('folhaoArq').click()">Puxar exames do folhão</button>
+  <button onclick="puxarDoFolhao()">Puxar exames do folhão</button>
   <input type="file" id="folhaoArq" accept=".json" hidden onchange="importarFolhao(event)">
   <button onclick="window.open(FOLHAO_URL,'_blank','noopener')">Abrir folhão</button>
   <button class="perigo" onclick="limparTudo()">Limpar tudo</button>
@@ -255,6 +255,12 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
 const FOLHAO_URL = "https://batistazz.github.io/gama/";
+// O folhão guarda tudo em localStorage sob esta chave. Ele mora em
+// batistazz.github.io/gama/ e este passômetro em .../passometro/ — MESMA
+// origem (o caminho não conta), então dá para ler direto, sem arquivo.
+// Verificado publicando duas páginas em caminhos diferentes do mesmo host:
+// a segunda leu o que a primeira gravou.
+const FOLHAO_CHAVE = "folhao_v2";
 const POR_FOLHA = 3;          // pacientes por folha A4 paisagem
 const CAMPOS_TEXTO = ["problemas", "caso", "exames", "hoje", "pendencias"];
 
@@ -908,6 +914,31 @@ function renderFicha() {
    O folhão (Gama) é quem lê o laudo; aqui só recebemos o resultado pronto.
    O arquivo é o backup dele. O casamento é por LEITO, e nada entra sem você
    ver antes o que vai mudar. */
+/* Caminho normal: o folhão foi usado NESTE navegador, então o banco dele
+   está ao alcance e não há arquivo nenhum para abrir. O arquivo continua
+   existindo como saída para quem importou os laudos noutro computador. */
+function puxarDoFolhao() {
+  let bruto = null;
+  try { bruto = localStorage.getItem(FOLHAO_CHAVE); } catch (e) {}
+  if (bruto) {
+    try {
+      aplicarFolhao(JSON.parse(bruto));
+      return;
+    } catch (erro) {
+      aviso("Achei o folhão neste navegador, mas não consegui ler: " + erro.message);
+      return;
+    }
+  }
+  if (confirm(
+      "Não achei o folhão NESTE navegador." + "\n\n" +
+      "O folhão guarda os exames na máquina onde você importou os laudos. " +
+      "Se foi noutro computador, abra o folhão lá, use Backup, e traga o arquivo." +
+      "\n\n" +
+      "Quer escolher o arquivo de backup do folhão agora?")) {
+    document.getElementById("folhaoArq").click();
+  }
+}
+
 function importarFolhao(evento) {
   const arquivo = evento.target.files[0];
   if (!arquivo) return;
