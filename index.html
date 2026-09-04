@@ -174,6 +174,15 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 .bloco-exame .linhas{padding:8px 12px;font-size:12px;line-height:1.5;
                      white-space:pre-wrap;overflow-wrap:anywhere}
 .bloco-exame .data{font-weight:700;color:var(--marca)}
+.varios textarea{width:100%;min-height:180px;font:13px/1.5 ui-monospace,Consolas,monospace;
+                 border:1px solid var(--linha);border-radius:6px;padding:10px;resize:vertical}
+.varios .previa{margin-top:12px;border:1px solid var(--linha);border-radius:6px;overflow:hidden}
+.varios .previa table{width:100%;table-layout:auto;border-collapse:collapse;background:#fff}
+.varios .previa td,.varios .previa th{border-bottom:1px solid var(--linha);padding:5px 8px;
+                                      font-size:13px;text-align:left;position:static}
+.varios .previa th{background:#f4f6f8;color:var(--fraca);font-size:11px;text-transform:uppercase}
+.varios .previa td.leito{font-weight:700}
+.varios .previa .falta{color:var(--fraca);font-style:italic}
 .folhao-vazio{padding:16px;border:1px solid var(--linha);border-radius:8px;background:#fffbe6}
 .folhao-vazio p{margin:0 0 10px;line-height:1.5}
 @media print{.ficha{display:none !important}}
@@ -217,6 +226,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 <div class="barra">
   <b>PASSÔMETRO</b><span id="servico">Enfermaria / SCLS</span>
   <button class="forte" onclick="novoPaciente()">+ Paciente</button>
+  <button onclick="abrirVarios()">+ Vários leitos</button>
   <button onclick="ordenar()">Ordenar por leito</button>
   <span class="espaco"></span>
   <button onclick="window.print()">Imprimir</button>
@@ -559,6 +569,23 @@ function listaDeItens(p, chave) {
     texto.value = item.texto || "";
     texto.placeholder = eAtb ? "droga, dose, via" : "medicação, dose, via";
     texto.oninput = () => { item.texto = texto.value; salvarAdiado(); };
+
+    /* Colar um bloco do prontuário vira uma linha por item, em vez de tudo
+       espremido num campo só. Nada é interpretado: cada linha entra como
+       está. Uma linha só continua sendo uma colagem normal. */
+    texto.onpaste = evento => {
+      const colado = (evento.clipboardData || window.clipboardData).getData("text") || "";
+      const linhas = colado.split(/\r?\n/).map(l => l.trim().replace(/^[-•*\s]+/, "")).filter(Boolean);
+      if (linhas.length < 2) return;
+      evento.preventDefault();
+      item.texto = linhas[0];
+      const novos = linhas.slice(1).map(l => eAtb ? { texto: l, inicio: "" }
+                                                  : { texto: l, suspenso: false });
+      p[chave].splice(indice + 1, 0, ...novos);
+      salvar();
+      if (fichaAberta) renderFicha(); else render();
+      aviso(linhas.length + " item(ns) colado(s) do prontuário.");
+    };
 
     div.appendChild(texto);
 
@@ -1099,6 +1126,136 @@ function renderFicha() {
   alvo.appendChild(papel);
 }
 
+
+
+/* =============================================== criar varios de uma vez
+   Cadastrar treze leitos um a um, clicando e digitando, e' trabalho demais
+   para o comeco do plantao. Aqui se cola a lista inteira — do prontuario, da
+   planilha, de onde vier — e sai a enfermaria.
+
+   A leitura e' tolerante e NAO adivinha: o que ela nao reconhecer vai inteiro
+   para o nome, e a previa mostra o que entendeu de cada linha ANTES de criar. */
+const LEITO_NA_LINHA = /^\s*([0-9]{1,4}\s*[\/\-]\s*[0-9A-Za-z]{1,3}|[0-9]{1,4}[A-Za-z]?)\s*[-–:\t]?\s*/;
+const IDADE_NA_LINHA = /(?:^|[\s,(])(\d{1,3})\s*(?:a|anos)\b/i;
+
+function lerLinhaDePaciente(bruto) {
+  let resto = bruto.trim();
+  if (!resto) return null;
+  let leito = "";
+  const m = LEITO_NA_LINHA.exec(resto);
+  if (m) {
+    leito = m[1].replace(/\s+/g, "");
+    resto = resto.slice(m[0].length);
+  }
+  let idade = "";
+  // A planilha escreve tanto "58a" quanto "82" solto depois da vírgula.
+  // Número solto só vale como idade se for plausível e vier no lugar dela.
+  let mi = IDADE_NA_LINHA.exec(resto);
+  if (!mi) {
+    const solto = /,\s*(\d{1,3})\s*(?=$|[\/|·-])/.exec(resto);
+    if (solto && Number(solto[1]) <= 120) mi = solto;
+  }
+  if (mi) {
+    idade = mi[1];
+    resto = (resto.slice(0, mi.index) + " " + resto.slice(mi.index + mi[0].length));
+  }
+  // "/ D4 IH" e o que vier depois de virgula/barra nao e' nome.
+  const nome = resto.replace(/\bD\s*\d{1,3}\s*IH\b.*/i, "")
+                    .replace(/[,;/|]+\s*$/, "")
+                    .replace(/\s{2,}/g, " ")
+                    .trim();
+  if (!leito && !nome) return null;
+  return { leito: leito, nome: nome, idade: idade };
+}
+
+function abrirVarios() {
+  const alvo = document.getElementById("ficha");
+  alvo.hidden = false;
+  alvo.textContent = "";
+  fichaAberta = null;
+
+  const papel = document.createElement("div");
+  papel.className = "papel";
+
+  const topo = document.createElement("div");
+  topo.className = "topo";
+  const titulo = document.createElement("span");
+  titulo.className = "nome"; titulo.textContent = "Criar vários leitos";
+  const espaco = document.createElement("span"); espaco.className = "espaco";
+  const fechar = document.createElement("button");
+  fechar.textContent = "Cancelar";
+  fechar.onclick = () => { alvo.hidden = true; };
+  topo.append(titulo, espaco, fechar);
+
+  const conteudo = document.createElement("div");
+  conteudo.className = "conteudo varios";
+
+  const explica = document.createElement("p");
+  explica.className = "ajuda";
+  explica.style.marginBottom = "10px";
+  explica.textContent = "Cole uma linha por paciente. Pode ser só o leito, ou leito e nome, " +
+    "ou o que vier colado do prontuário — o que eu não reconhecer vai para o nome e você corrige depois.";
+
+  const area = document.createElement("textarea");
+  area.placeholder = "302/1 Pedro dos Santos, 58a\n304/2 Maria Luiza de Avelar, 82a\n304/3\n305/1 João Batista, 51 anos";
+
+  const previa = document.createElement("div");
+  previa.className = "previa";
+  const criar = document.createElement("button");
+  criar.className = "forte";
+  criar.style.cssText = "background:var(--marca);color:#fff;border:0;border-radius:6px;padding:8px 16px;cursor:pointer;margin-top:12px";
+
+  let lidos = [];
+  const atualizar = () => {
+    lidos = area.value.split("\n").map(lerLinhaDePaciente).filter(Boolean);
+    previa.textContent = "";
+    if (!lidos.length) {
+      criar.disabled = true;
+      criar.textContent = "Cole a lista acima";
+      return;
+    }
+    const tabela = document.createElement("table");
+    const cab = document.createElement("tr");
+    ["Leito", "Paciente", "Idade"].forEach(t => {
+      const th = document.createElement("th"); th.textContent = t; cab.appendChild(th);
+    });
+    tabela.appendChild(cab);
+    lidos.forEach(x => {
+      const tr = document.createElement("tr");
+      const td1 = document.createElement("td"); td1.className = "leito";
+      td1.textContent = x.leito || "—";
+      if (!x.leito) td1.className += " falta";
+      const td2 = document.createElement("td");
+      td2.textContent = x.nome || "(sem nome)";
+      if (!x.nome) td2.className = "falta";
+      const td3 = document.createElement("td"); td3.textContent = x.idade || "—";
+      tr.append(td1, td2, td3);
+      tabela.appendChild(tr);
+    });
+    previa.appendChild(tabela);
+    criar.disabled = false;
+    criar.textContent = "Criar " + lidos.length + " paciente(s)";
+  };
+  area.oninput = atualizar;
+  atualizar();
+
+  criar.onclick = () => {
+    lidos.forEach(x => {
+      const p = pacienteVazio();
+      p.leito = x.leito; p.nome = x.nome; p.idade = x.idade;
+      dados.pacientes.push(p);
+    });
+    ordenar();
+    alvo.hidden = true;
+    aviso(lidos.length + " paciente(s) criado(s). Preencha a data de internação de cada um " +
+          "para o DIH começar a calcular.");
+  };
+
+  conteudo.append(explica, area, previa, criar);
+  papel.append(topo, conteudo);
+  alvo.appendChild(papel);
+  setTimeout(() => area.focus(), 50);
+}
 
 /* ================================================= painel do folhão
    O folhão mora em batistazz.github.io/gama/ e este passômetro em
