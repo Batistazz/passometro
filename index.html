@@ -37,7 +37,11 @@ button{font:inherit;font-size:13px;padding:6px 11px;border-radius:6px;
 button:hover{background:rgba(255,255,255,.15)}
 button.forte{background:#fff;color:var(--marca);border-color:#fff;font-weight:600}
 button.perigo{border-color:#ffc9c6;color:#ffe3e1}
-.dica{padding:6px 12px;background:#fffbe6;border-bottom:1px solid #e8dfae;font-size:12px;color:#5b4a00}
+/* Grudada logo abaixo da barra: antes o aviso aparecia no topo da página e,
+   com a lista rolada, ninguém via a resposta do que tinha acabado de clicar. */
+.dica{position:sticky;top:var(--altura-barra,44px);z-index:29;
+      padding:6px 12px;background:#fffbe6;border-bottom:1px solid #e8dfae;
+      font-size:12px;color:#5b4a00}
 .dica.urgente{background:#fdecea;border-bottom-color:#f0b4ae;color:#8c1d18;font-weight:600}
 
 /* ---------------------------------------------------------- grade */
@@ -149,6 +153,28 @@ td.leito button.abrir{width:100%;border:0;background:none;color:var(--marca);
        font:inherit;font-weight:700;font-size:15px;padding:6px 2px;cursor:pointer;border-radius:4px}
 td.leito button.abrir:hover{background:var(--marca-clara)}
 td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
+/* --------------------------------------------------- painel do folhão */
+.folhao-topo{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+             padding:0 0 12px;border-bottom:1px solid var(--linha);margin-bottom:14px}
+.folhao-topo .conta{color:var(--fraca);font-size:13px}
+.bloco-exame{border:1px solid var(--linha);border-radius:8px;margin-bottom:12px;
+             cursor:pointer;background:#fff;transition:border-color .1s,background .1s}
+.bloco-exame:hover{border-color:var(--marca);background:var(--marca-clara)}
+.bloco-exame:active{transform:translateY(1px)}
+.bloco-exame.copiado{border-color:var(--ok);background:#eefaf2}
+.bloco-exame .cabeca{display:flex;gap:10px;align-items:baseline;padding:8px 12px;
+                     border-bottom:1px solid var(--linha);background:#f4f6f8;
+                     border-radius:8px 8px 0 0}
+.bloco-exame.copiado .cabeca{background:#dff3e6}
+.bloco-exame .leito{font-weight:700;font-size:16px}
+.bloco-exame .nome{font-weight:700;text-transform:uppercase;font-size:13px}
+.bloco-exame .acao{margin-left:auto;font-size:12px;color:var(--marca);white-space:nowrap}
+.bloco-exame.copiado .acao{color:var(--ok);font-weight:600}
+.bloco-exame .linhas{padding:8px 12px;font-size:12px;line-height:1.5;
+                     white-space:pre-wrap;overflow-wrap:anywhere}
+.bloco-exame .data{font-weight:700;color:var(--marca)}
+.folhao-vazio{padding:16px;border:1px solid var(--linha);border-radius:8px;background:#fffbe6}
+.folhao-vazio p{margin:0 0 10px;line-height:1.5}
 @media print{.ficha{display:none !important}}
 
 /* ------------------------------------------------------- impressão */
@@ -189,12 +215,11 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
   <button onclick="ordenar()">Ordenar por leito</button>
   <span class="espaco"></span>
   <button onclick="window.print()">Imprimir</button>
-  <button class="forte" onclick="salvarArquivo()">Backup (salvar arquivo)</button>
-  <button onclick="document.getElementById('arq').click()">Abrir arquivo</button>
+  <button class="forte" onclick="salvarArquivo()">Salvar backup</button>
+  <button onclick="document.getElementById('arq').click()">Restaurar backup</button>
   <input type="file" id="arq" accept=".json" hidden onchange="abrirArquivo(event)">
-  <button onclick="puxarDoFolhao()">Puxar exames do folhão</button>
+  <button onclick="abrirFolhao()">Exames do folhão</button>
   <input type="file" id="folhaoArq" accept=".json" hidden onchange="importarFolhao(event)">
-  <button onclick="window.open(FOLHAO_URL,'_blank','noopener')">Abrir folhão</button>
   <button class="perigo" onclick="limparTudo()">Limpar tudo</button>
 </div>
 
@@ -224,16 +249,18 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
          e os dados ficam <b>neste navegador</b> — não sobem para lugar nenhum.</p>
       <ol>
         <li><b>Já tem um arquivo do passômetro?</b> Use
-            <button class="chamada claro" onclick="document.getElementById('arq').click()">Abrir arquivo</button>
-            e a enfermaria inteira aparece.</li>
+            <button class="chamada claro" onclick="document.getElementById('arq').click()">Restaurar backup</button>
+            e a enfermaria inteira aparece. É assim que se traz de volta um dia salvo,
+            ou se leva a enfermaria de um computador para outro.</li>
         <li><b>Começando do zero?</b>
             <button class="chamada" onclick="novoPaciente()">+ Paciente</button>
             e preencha leito, nome e a data de internação. O <b>DIH se calcula sozinho</b>
             a partir dela, todo dia, e nunca mais fica errado.</li>
         <li><b>Para evoluir um paciente</b>, clique no número do leito: abre a ficha dele,
             com espaço para escrever a evolução, a avaliação e a conduta.</li>
-        <li><b>Exames</b> vêm do folhão: lá você exporta o backup e aqui usa
-            <b>Puxar exames do folhão</b>. Você não digita exame.</li>
+        <li><b>Exames</b> vêm do folhão: clique em <b>Exames do folhão</b>, veja os
+            blocos por paciente e clique no bloco para copiar. Você cola na ficha,
+            e não digita exame.</li>
         <li><b>Imprimir</b> sai em A4 deitado, 3 pacientes por folha, com espaço
             para anotar sinais vitais à mão.</li>
       </ol>
@@ -910,6 +937,182 @@ function renderFicha() {
   alvo.appendChild(papel);
 }
 
+
+/* ================================================= painel do folhão
+   O folhão mora em batistazz.github.io/gama/ e este passômetro em
+   .../passometro/ — mesma origem, então dá para ler o banco dele direto.
+
+   Aqui o programa NÃO escolhe para quem vai cada exame. Ele mostra os blocos
+   com nome e leito, e quem clica copia. A decisão de onde colar é de quem
+   está com o paciente na frente. */
+function bancoDoFolhao() {
+  let bruto = null;
+  try { bruto = localStorage.getItem(FOLHAO_CHAVE); } catch (e) { return null; }
+  if (!bruto) return null;
+  try {
+    const banco = JSON.parse(bruto);
+    return Array.isArray(banco && banco.observations) ? banco : null;
+  } catch (e) { return null; }
+}
+
+/* Agrupa as observações por internação e por data de coleta. */
+function blocosDoFolhao(banco) {
+  const pacientes = {};
+  (banco.patients || []).forEach(p => { pacientes[p.id] = p.name || ""; });
+  const encontros = {};
+  (banco.encounters || []).forEach(e => {
+    encontros[e.id] = { leito: String(e.bed || "").trim(),
+                        nome: pacientes[e.patient_id] || "",
+                        datas: {} };
+  });
+
+  banco.observations.forEach(o => {
+    const enc = encontros[o.encounter_id];
+    if (!enc || !o.collection_datetime) return;
+    const valor = o.value_text || (o.value_numeric != null ? String(o.value_numeric) : "");
+    if (!valor) return;
+    const dia = String(o.collection_datetime).slice(0, 10);
+    const nome = o.exam_name_original || o.exam_name_normalized || "?";
+    (enc.datas[dia] = enc.datas[dia] || []).push(nome + " " + valor + (o.unit ? " " + o.unit : ""));
+  });
+
+  return Object.keys(encontros)
+    .map(id => encontros[id])
+    .filter(e => Object.keys(e.datas).length)
+    .map(e => {
+      const dias = Object.keys(e.datas).sort().reverse();
+      return {
+        leito: e.leito, nome: e.nome, dias: dias,
+        total: dias.reduce((n, d) => n + e.datas[d].length, 0),
+        linhas: dias.map(d => ({
+          rotulo: d.slice(8, 10) + "/" + d.slice(5, 7),
+          texto: e.datas[d].join(" | ")
+        }))
+      };
+    })
+    .sort((a, b) => chaveLeito(a.leito).localeCompare(chaveLeito(b.leito)));
+}
+
+function abrirFolhao() {
+  const alvo = document.getElementById("ficha");
+  alvo.hidden = false;
+  alvo.textContent = "";
+  fichaAberta = null;
+
+  const papel = document.createElement("div");
+  papel.className = "papel";
+
+  const topo = document.createElement("div");
+  topo.className = "topo";
+  const titulo = document.createElement("span");
+  titulo.className = "nome"; titulo.textContent = "Exames do folhão";
+  const espaco = document.createElement("span"); espaco.className = "espaco";
+  const fechar = document.createElement("button");
+  fechar.textContent = "Voltar à enfermaria";
+  fechar.onclick = () => { alvo.hidden = true; };
+  topo.append(titulo, espaco, fechar);
+
+  const conteudo = document.createElement("div");
+  conteudo.className = "conteudo";
+
+  const barra = document.createElement("div");
+  barra.className = "folhao-topo";
+  const irAoFolhao = document.createElement("button");
+  irAoFolhao.className = "chamada";
+  irAoFolhao.style.cssText = "background:var(--marca);color:#fff;border:0;border-radius:6px;padding:7px 14px;cursor:pointer";
+  irAoFolhao.textContent = "Abrir folhão (importar laudos)";
+  irAoFolhao.onclick = () => window.open(FOLHAO_URL, "_blank", "noopener");
+  const conta = document.createElement("span");
+  conta.className = "conta";
+  barra.append(irAoFolhao, conta);
+  conteudo.appendChild(barra);
+
+  const banco = bancoDoFolhao();
+  const blocos = banco ? blocosDoFolhao(banco) : [];
+
+  if (!blocos.length) {
+    conta.textContent = "";
+    const caixa = document.createElement("div");
+    caixa.className = "folhao-vazio";
+    const p1 = document.createElement("p");
+    p1.innerHTML = banco
+      ? "<b>O folhão está aqui, mas sem resultado nenhum ainda.</b> Abra o folhão, importe um laudo e volte."
+      : "<b>Não encontrei o folhão neste navegador.</b> Ele guarda os exames na máquina onde os laudos foram importados. Se foi noutro computador, abra o folhão lá, use <b>Backup</b>, e traga o arquivo.";
+    const botao = document.createElement("button");
+    botao.style.cssText = "background:#fff;color:var(--marca);border:1px solid var(--marca);border-radius:6px;padding:7px 14px;cursor:pointer";
+    botao.textContent = "Escolher arquivo de backup do folhão";
+    botao.onclick = () => document.getElementById("folhaoArq").click();
+    caixa.append(p1, botao);
+    conteudo.appendChild(caixa);
+  } else {
+    const total = blocos.reduce((n, b) => n + b.total, 0);
+    conta.textContent = blocos.length + " paciente(s) · " + total + " resultado(s) · clique no bloco para copiar";
+    blocos.forEach(b => conteudo.appendChild(blocoDeExame(b)));
+  }
+
+  papel.append(topo, conteudo);
+  alvo.appendChild(papel);
+  alvo.scrollTop = 0;
+}
+
+function blocoDeExame(b) {
+  const texto = b.linhas.map(l => l.rotulo + ": " + l.texto).join("\n");
+
+  const caixa = document.createElement("div");
+  caixa.className = "bloco-exame";
+  caixa.title = "Clique para copiar os exames deste paciente";
+
+  const cabeca = document.createElement("div");
+  cabeca.className = "cabeca";
+  const leito = document.createElement("span");
+  leito.className = "leito"; leito.textContent = b.leito || "sem leito";
+  const nome = document.createElement("span");
+  nome.className = "nome"; nome.textContent = b.nome || "(sem nome)";
+  const acao = document.createElement("span");
+  acao.className = "acao"; acao.textContent = "clique para copiar";
+  cabeca.append(leito, nome, acao);
+
+  const linhas = document.createElement("div");
+  linhas.className = "linhas";
+  b.linhas.forEach((l, i) => {
+    if (i) linhas.append(document.createElement("br"));
+    const rot = document.createElement("span");
+    rot.className = "data"; rot.textContent = l.rotulo + ": ";
+    linhas.append(rot, document.createTextNode(l.texto));
+  });
+
+  caixa.append(cabeca, linhas);
+  caixa.onclick = () => copiar(texto, caixa, acao);
+  return caixa;
+}
+
+/* Copia com a API moderna e, se ela não estiver disponível (navegador antigo
+   ou página sem HTTPS), seleciona o texto para o Ctrl+C funcionar. */
+function copiar(texto, caixa, acao) {
+  const confirmar = () => {
+    caixa.classList.add("copiado");
+    acao.textContent = "copiado ✓";
+    setTimeout(() => {
+      caixa.classList.remove("copiado");
+      acao.textContent = "clique para copiar";
+    }, 2500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(confirmar).catch(() => selecionar(caixa, acao));
+  } else {
+    selecionar(caixa, acao);
+  }
+}
+
+function selecionar(caixa, acao) {
+  const faixa = document.createRange();
+  faixa.selectNodeContents(caixa.querySelector(".linhas"));
+  const selecao = window.getSelection();
+  selecao.removeAllRanges();
+  selecao.addRange(faixa);
+  acao.textContent = "selecionado — aperte Ctrl+C";
+}
+
 /* =============================================== exames vindos do folhão
    O folhão (Gama) é quem lê o laudo; aqui só recebemos o resultado pronto.
    O arquivo é o backup dele. O casamento é por LEITO, e nada entra sem você
@@ -945,7 +1148,7 @@ function importarFolhao(evento) {
   const leitor = new FileReader();
   leitor.onload = () => {
     try {
-      aplicarFolhao(JSON.parse(leitor.result));
+      guardarFolhaoDoArquivo(JSON.parse(leitor.result));
     } catch (erro) {
       aviso("Não consegui ler o backup do folhão: " + erro.message);
     } finally {
@@ -953,6 +1156,20 @@ function importarFolhao(evento) {
     }
   };
   leitor.readAsText(arquivo);
+}
+
+/* Backup do folhão vindo de outro computador: guarda no mesmo lugar em que o
+   folhão guardaria, e o painel passa a mostrá-lo como se fosse local. */
+function guardarFolhaoDoArquivo(pacote) {
+  const banco = (pacote && pacote.db) || pacote;
+  if (!banco || !Array.isArray(banco.observations)) {
+    aviso("Esse arquivo não é um backup do folhão (falta a lista de observações).");
+    return;
+  }
+  try { localStorage.setItem(FOLHAO_CHAVE, JSON.stringify(banco)); }
+  catch (e) { aviso("Não consegui guardar o folhão neste navegador: " + e.message); return; }
+  abrirFolhao();
+  aviso(banco.observations.length + " resultado(s) do folhão carregados do arquivo.");
 }
 
 function aplicarFolhao(pacote) {
@@ -1009,6 +1226,17 @@ function aplicarFolhao(pacote) {
   aviso(casados.length + " leito(s) receberam exames do folhão." +
         (semDono.length ? " " + semDono.length + " leito(s) do arquivo não têm paciente aqui." : ""));
 }
+
+/* Sem isto, um erro morre no console e a tela fica igual — foi exatamente
+   assim que "não aconteceu absolutamente nada" aconteceu. */
+function mostrarFalha(mensagem) {
+  const d = document.getElementById("dica");
+  d.textContent = "Algo quebrou: " + mensagem + " — recarregue a página; seus dados continuam salvos.";
+  d.classList.add("urgente");
+}
+window.addEventListener("error", e => mostrarFalha(e.message || "erro desconhecido"));
+window.addEventListener("unhandledrejection", e =>
+  mostrarFalha((e.reason && e.reason.message) || "falha numa operação"));
 
 window.addEventListener("beforeprint", renderFolhas);
 render();
