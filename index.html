@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passômetro — Enfermaria / SCLS</title>
+<!--
+  PASSÔMETRO — arquivo único, sem instalar nada.
+
+  Abre em qualquer navegador, funciona sem internet e sem servidor. Você edita
+  direto na grade que vai imprimir: o que está na tela é o que sai no papel.
+
+  Onde ficam os dados: no `localStorage` DESTE navegador, nesta máquina. Não
+  sobem para lugar nenhum. Trocou de computador, use "Salvar arquivo" e
+  "Abrir arquivo" para levar junto.
+
+  O que se calcula sozinho e nunca mais envelhece:
+    - DIH, a partir da data de internação;
+    - dia do antimicrobiano, a partir da data de início de cada droga.
+-->
+<style>
+:root{
+  --tinta:#16202b; --fraca:#5b6b7c; --papel:#eef1f4; --linha:#c9d3dc;
+  --marca:#5B3F86; --marca-clara:#efeaf6; --alerta:#b3261e; --ok:#1a7f4b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--papel);color:var(--tinta);
+     font:13px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+
+/* ---------------------------------------------------------- barra */
+.barra{position:sticky;top:0;z-index:30;background:var(--marca);color:#fff;
+       padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.barra b{font-size:15px;margin-right:6px}
+.barra .espaco{margin-left:auto}
+button{font:inherit;font-size:13px;padding:6px 11px;border-radius:6px;
+       border:1px solid rgba(255,255,255,.55);background:transparent;color:#fff;cursor:pointer}
+button:hover{background:rgba(255,255,255,.15)}
+button.forte{background:#fff;color:var(--marca);border-color:#fff;font-weight:600}
+button.perigo{border-color:#ffc9c6;color:#ffe3e1}
+.dica{padding:6px 12px;background:#fffbe6;border-bottom:1px solid #e8dfae;font-size:12px;color:#5b4a00}
+
+/* ---------------------------------------------------------- grade */
+.rolagem{overflow:auto;padding:10px}
+table{border-collapse:collapse;background:#fff;table-layout:fixed;width:1860px}
+th,td{border:1px solid var(--linha);vertical-align:top;padding:0}
+thead th{position:sticky;top:0;z-index:10;background:var(--marca);color:#fff;
+         font-size:11px;text-transform:uppercase;letter-spacing:.3px;
+         padding:6px 4px;text-align:center}
+tbody tr:nth-child(even) td{background:#fafbfc}
+
+.campo{width:100%;min-height:26px;padding:4px 5px;font:inherit;font-size:12px;
+       border:0;background:transparent;resize:none;outline:none;
+       white-space:pre-wrap;overflow-wrap:anywhere}
+.campo:focus{background:#fffbe6;box-shadow:inset 0 0 0 2px var(--marca)}
+td.leito .campo{font-weight:700;font-size:15px;text-align:center}
+
+.ident{padding:4px 5px;font-size:12px}
+.ident input{border:0;border-bottom:1px dotted var(--linha);background:transparent;
+             font:inherit;padding:1px 0;outline:none}
+.ident input:focus{background:#fffbe6;border-bottom-color:var(--marca)}
+.ident .nome{width:100%;font-weight:700;text-transform:uppercase}
+.ident .idade{width:34px;text-align:center}
+.ident .data{width:105px}
+.ident .linha2{margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+               font-size:11px;color:var(--fraca)}
+.dih{font-weight:700;font-size:13px;color:var(--marca);background:var(--marca-clara);
+     border-radius:4px;padding:0 5px}
+
+/* medicações e ATB: lista de itens dentro da célula */
+.itens{padding:3px 4px;font-size:12px}
+.item{display:flex;gap:4px;align-items:center;margin-bottom:4px;flex-wrap:wrap}
+.item input.txt{flex:1 1 100%}
+.item textarea,.item input.txt{flex:1;border:0;border-bottom:1px dotted var(--linha);
+     background:transparent;font:inherit;font-size:12px;padding:1px 2px;outline:none;
+     resize:none;overflow:hidden}
+.item input.txt:focus,.item textarea:focus{background:#fffbe6}
+.item.suspenso input.txt,.item.suspenso textarea{text-decoration:line-through;color:var(--fraca)}
+.item .data{width:88px;border:0;border-bottom:1px dotted var(--linha);background:transparent;
+            font:inherit;font-size:11px;outline:none;color:var(--fraca)}
+.item .dia{min-width:30px;text-align:center;font-weight:700;font-size:11px;color:var(--marca)}
+.item .dia.falta{color:var(--alerta);font-weight:400;font-style:italic;min-width:auto}
+.mini{border:1px solid var(--linha);background:#fff;color:var(--fraca);border-radius:4px;
+      font-size:11px;padding:0 5px;cursor:pointer;line-height:18px}
+.mini:hover{background:var(--marca-clara);color:var(--marca)}
+.mini.on{background:var(--marca);color:#fff;border-color:var(--marca)}
+.add{font-size:11px;color:var(--marca);cursor:pointer;border:0;background:none;padding:2px 0}
+.add:hover{text-decoration:underline}
+
+td.acoes{width:34px;text-align:center;background:#fff}
+td.acoes button{color:var(--fraca);border-color:var(--linha);padding:2px 6px;font-size:12px}
+td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--alerta)}
+
+.vazio{padding:24px;text-align:center;color:var(--fraca);background:#fff}
+
+/* ------------------------------------------------------- impressão */
+.folhas{display:none}
+@media print{
+  .barra,.dica,.rolagem,.acoes{display:none !important}
+  .folhas{display:block}
+  body{background:#fff;margin:0}
+}
+@page{size:A4 landscape;margin:8mm}
+
+.folha{page-break-after:always;break-after:page}
+.folha:last-child{page-break-after:auto;break-after:auto}
+.folha h1{font:700 10pt/1.2 Arial;margin:0 0 1.5mm;padding-bottom:1mm;
+          border-bottom:1.2pt solid #000;display:flex;gap:6px;align-items:baseline}
+.folha h1 .meta{font-weight:400;font-size:8pt;color:#333}
+.folha h1 .folio{margin-left:auto;font-weight:400;font-size:8pt}
+.folha table{width:100%;table-layout:fixed;font:7.6pt/1.25 Arial}
+.folha th{background:#e9eef3;color:#000;font-size:6pt;padding:.6mm 1mm;
+          border:.4pt solid #000;text-transform:uppercase;position:static}
+.folha td{border:.4pt solid #000;padding:.8mm 1mm;vertical-align:top;
+          white-space:pre-wrap;overflow-wrap:anywhere}
+.folha td.leito{font-weight:700;font-size:9pt;text-align:center}
+.folha .dih{background:none;color:#000}
+.folha .susp{text-decoration:line-through}
+.folha .manus{border-bottom:.5pt solid #444;display:inline-block;min-width:10mm}
+</style>
+</head>
+<body>
+
+<div class="barra">
+  <b>PASSÔMETRO</b><span id="servico">Enfermaria / SCLS</span>
+  <button class="forte" onclick="novoPaciente()">+ Paciente</button>
+  <button onclick="ordenar()">Ordenar por leito</button>
+  <span class="espaco"></span>
+  <button onclick="window.print()">Imprimir</button>
+  <button onclick="salvarArquivo()">Salvar arquivo</button>
+  <button onclick="document.getElementById('arq').click()">Abrir arquivo</button>
+  <input type="file" id="arq" accept=".json" hidden onchange="abrirArquivo(event)">
+  <button class="perigo" onclick="limparTudo()">Limpar tudo</button>
+</div>
+
+<div class="dica" id="dica"></div>
+
+<div class="rolagem">
+  <table id="grade">
+    <thead>
+      <tr>
+        <th style="width:70px">Leito</th>
+        <th style="width:210px">Paciente · idade · DIH</th>
+        <th style="width:210px">Problemas ativos</th>
+        <th style="width:240px">HPP · alergias · HMA</th>
+        <th style="width:230px">Exames</th>
+        <th style="width:230px">Medicações</th>
+        <th style="width:210px">Antimicrobianos</th>
+        <th style="width:230px">Hoje: evolução · avaliação · conduta</th>
+        <th style="width:196px">Pendências</th>
+        <th style="width:34px"></th>
+      </tr>
+    </thead>
+    <tbody id="corpo"></tbody>
+  </table>
+  <div class="vazio" id="vazio" hidden>
+    Nenhum paciente ainda. Clique em <b>+ Paciente</b>.
+  </div>
+</div>
+
+<div class="folhas" id="folhas"></div>
+
+<script>
+"use strict";
+const CHAVE = "passometro_scls_v1";
+const POR_FOLHA = 3;          // pacientes por folha A4 paisagem
+const CAMPOS_TEXTO = ["problemas", "caso", "exames", "hoje", "pendencias"];
+
+let dados = carregar();
+
+/* ------------------------------------------------------ persistência */
+function carregar() {
+  try {
+    const bruto = localStorage.getItem(CHAVE);
+    if (bruto) return JSON.parse(bruto);
+  } catch (e) { /* navegador sem localStorage: segue em memória */ }
+  return { pacientes: [] };
+}
+function salvar() {
+  try { localStorage.setItem(CHAVE, JSON.stringify(dados)); }
+  catch (e) { aviso("Não consegui gravar neste navegador. Use Salvar arquivo."); }
+}
+
+/* ------------------------------------------------------------ datas */
+function hoje() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+function comoData(iso) {
+  if (!iso) return null;
+  const [a, m, d] = iso.split("-").map(Number);
+  if (!a || !m || !d) return null;
+  return new Date(a, m - 1, d);
+}
+function diasDesde(iso) {
+  const d = comoData(iso);
+  if (!d) return null;
+  return Math.round((hoje() - d) / 86400000);
+}
+// D0 no dia da admissão e no dia em que o antimicrobiano começa, como o
+// passômetro do serviço sempre escreveu.
+function rotuloDih(iso) { const n = diasDesde(iso); return n === null ? "" : "D" + n + "IH"; }
+function rotuloDia(iso) { const n = diasDesde(iso); return n === null ? null : "D" + n; }
+
+/* --------------------------------------------------------- paciente */
+function pacienteVazio() {
+  return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+           leito: "", nome: "", idade: "", internacao: "",
+           problemas: "", caso: "", exames: "", hoje: "", pendencias: "",
+           medicacoes: [], atbs: [] };
+}
+function novoPaciente() {
+  dados.pacientes.push(pacienteVazio());
+  salvar(); render();
+  const linhas = document.querySelectorAll("#corpo tr");
+  const ultima = linhas[linhas.length - 1];
+  if (ultima) ultima.querySelector(".campo, input").focus();
+}
+function removerPaciente(id) {
+  const p = dados.pacientes.find(x => x.id === id);
+  const nome = (p && (p.nome || p.leito)) || "este paciente";
+  if (!confirm("Tirar " + nome + " do passômetro?\n\nNão dá para desfazer.")) return;
+  dados.pacientes = dados.pacientes.filter(x => x.id !== id);
+  salvar(); render();
+}
+
+/* Ordem natural de leito: 305/5 antes de 305/10, e 99 antes de 305. */
+function chaveLeito(leito) {
+  return String(leito || "~").toUpperCase()
+    .replace(/\d+/g, n => n.padStart(6, "0"));
+}
+function ordenar() {
+  dados.pacientes.sort((a, b) => chaveLeito(a.leito).localeCompare(chaveLeito(b.leito)));
+  salvar(); render();
+}
+
+/* ------------------------------------------------------------ grade */
+function render() {
+  const corpo = document.getElementById("corpo");
+  corpo.textContent = "";
+  document.getElementById("vazio").hidden = dados.pacientes.length > 0;
+  document.getElementById("grade").hidden = dados.pacientes.length === 0;
+
+  dados.pacientes.forEach(p => corpo.appendChild(linhaDoPaciente(p)));
+  renderFolhas();
+  resumo();
+}
+
+function linhaDoPaciente(p) {
+  const tr = document.createElement("tr");
+  tr.appendChild(celulaCampo(p, "leito", "leito"));
+  tr.appendChild(celulaIdentidade(p));
+  tr.appendChild(celulaCampo(p, "problemas"));
+  tr.appendChild(celulaCampo(p, "caso"));
+  tr.appendChild(celulaCampo(p, "exames"));
+  tr.appendChild(celulaLista(p, "medicacoes"));
+  tr.appendChild(celulaLista(p, "atbs"));
+  tr.appendChild(celulaCampo(p, "hoje"));
+  tr.appendChild(celulaCampo(p, "pendencias"));
+
+  const acoes = document.createElement("td");
+  acoes.className = "acoes";
+  const botao = document.createElement("button");
+  botao.textContent = "✕";
+  botao.title = "Tirar do passômetro";
+  botao.onclick = () => removerPaciente(p.id);
+  acoes.appendChild(botao);
+  tr.appendChild(acoes);
+  return tr;
+}
+
+function celulaCampo(p, chave, classe) {
+  const td = document.createElement("td");
+  if (classe) td.className = classe;
+  const area = document.createElement("textarea");
+  area.className = "campo";
+  area.rows = 1;
+  area.value = p[chave] || "";
+  area.oninput = () => { p[chave] = area.value; crescer(area); salvarAdiado(); };
+  td.appendChild(area);
+  requestAnimationFrame(() => crescer(area));
+  return td;
+}
+
+/* A identificação junta nome, idade e data de internação numa célula só:
+   a data é o que faz o DIH se calcular, sem gastar uma coluna inteira. */
+function celulaIdentidade(p) {
+  const td = document.createElement("td");
+  const caixa = document.createElement("div");
+  caixa.className = "ident";
+
+  const nome = document.createElement("input");
+  nome.className = "nome"; nome.value = p.nome || ""; nome.placeholder = "nome do paciente";
+  nome.oninput = () => { p.nome = nome.value; salvarAdiado(); };
+
+  const linha2 = document.createElement("div");
+  linha2.className = "linha2";
+
+  const idade = document.createElement("input");
+  idade.className = "idade"; idade.value = p.idade || ""; idade.placeholder = "--";
+  idade.oninput = () => { p.idade = idade.value; salvarAdiado(); };
+
+  const data = document.createElement("input");
+  data.className = "data"; data.type = "date"; data.value = p.internacao || "";
+  data.title = "Data de internação — é daqui que sai o DIH";
+
+  const dih = document.createElement("span");
+  dih.className = "dih";
+  const pintar = () => { dih.textContent = rotuloDih(p.internacao) || "D?IH"; };
+  data.oninput = () => { p.internacao = data.value; pintar(); salvarAdiado(); renderFolhasAdiado(); };
+  pintar();
+
+  linha2.append(idade, document.createTextNode("anos · internou"),
+                data, dih);
+  caixa.append(nome, linha2);
+  td.appendChild(caixa);
+  return td;
+}
+
+/* Medicações e antimicrobianos: lista de itens dentro da célula.
+   Medicação suspensa fica RISCADA e continua legível.
+   Antimicrobiano tem data de início, e o dia se calcula sozinho. */
+function celulaLista(p, chave) {
+  const td = document.createElement("td");
+  const caixa = document.createElement("div");
+  caixa.className = "itens";
+  const eAtb = chave === "atbs";
+  p[chave] = p[chave] || [];
+
+  p[chave].forEach((item, indice) => {
+    const div = document.createElement("div");
+    div.className = "item" + (item.suspenso ? " suspenso" : "");
+
+    const texto = document.createElement("input");
+    texto.className = "txt";
+    texto.value = item.texto || "";
+    texto.placeholder = eAtb ? "droga, dose, via" : "medicação, dose, via";
+    texto.oninput = () => { item.texto = texto.value; salvarAdiado(); };
+
+    div.appendChild(texto);
+
+    if (eAtb) {
+      const data = document.createElement("input");
+      data.className = "data"; data.type = "date"; data.value = item.inicio || "";
+      data.title = "Início — é daqui que sai o D#";
+      const dia = document.createElement("span");
+      const pintar = () => {
+        const r = rotuloDia(item.inicio);
+        dia.textContent = r || "falta início";
+        dia.className = "dia" + (r ? "" : " falta");
+      };
+      data.oninput = () => { item.inicio = data.value; pintar(); salvarAdiado(); renderFolhasAdiado(); };
+      pintar();
+      div.append(data, dia);
+    } else {
+      const risco = document.createElement("button");
+      risco.className = "mini" + (item.suspenso ? " on" : "");
+      risco.textContent = "riscar";
+      risco.title = "Marcar como suspensa: fica riscada, mas continua legível";
+      risco.onclick = () => {
+        item.suspenso = !item.suspenso;
+        salvar(); render();
+      };
+      div.appendChild(risco);
+    }
+
+    const tirar = document.createElement("button");
+    tirar.className = "mini";
+    tirar.textContent = "✕";
+    tirar.onclick = () => { p[chave].splice(indice, 1); salvar(); render(); };
+    div.appendChild(tirar);
+
+    caixa.appendChild(div);
+  });
+
+  const mais = document.createElement("button");
+  mais.className = "add";
+  mais.textContent = eAtb ? "+ antimicrobiano" : "+ medicação";
+  mais.onclick = () => {
+    p[chave].push(eAtb ? { texto: "", inicio: "" } : { texto: "", suspenso: false });
+    salvar(); render();
+  };
+  caixa.appendChild(mais);
+
+  td.appendChild(caixa);
+  return td;
+}
+
+function crescer(area) {
+  area.style.height = "auto";
+  area.style.height = Math.max(26, area.scrollHeight) + "px";
+}
+
+let relogio = null;
+function salvarAdiado() {
+  clearTimeout(relogio);
+  relogio = setTimeout(() => { salvar(); resumo(); }, 400);
+}
+let relogioFolhas = null;
+function renderFolhasAdiado() {
+  clearTimeout(relogioFolhas);
+  relogioFolhas = setTimeout(renderFolhas, 400);
+}
+
+/* -------------------------------------------------------- impressão */
+/* A paginação é feita aqui, uma tabela por folha, para que o cabeçalho
+   apareça em TODAS as páginas: o Chrome não repete <thead> de forma
+   confiável entre páginas impressas. */
+function renderFolhas() {
+  const alvo = document.getElementById("folhas");
+  alvo.textContent = "";
+  const lista = dados.pacientes;
+  const total = Math.max(1, Math.ceil(lista.length / POR_FOLHA));
+  const agora = new Date();
+  const carimbo = agora.toLocaleDateString("pt-BR") + " " +
+    agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+  for (let f = 0; f < total; f++) {
+    const folha = document.createElement("section");
+    folha.className = "folha";
+
+    const titulo = document.createElement("h1");
+    titulo.append(txt("PASSÔMETRO — " + document.getElementById("servico").textContent));
+    titulo.append(meta(agora.toLocaleDateString("pt-BR")));
+    titulo.append(meta("gerado " + carimbo));
+    titulo.append(meta(lista.length + " paciente(s)"));
+    const folio = document.createElement("span");
+    folio.className = "folio";
+    folio.textContent = "folha " + (f + 1) + " de " + total;
+    titulo.appendChild(folio);
+    folha.appendChild(titulo);
+
+    const tabela = document.createElement("table");
+    const cabecalho = document.createElement("thead");
+    const linha = document.createElement("tr");
+    [["Leito", "6%"], ["Paciente · DIH", "13%"], ["Problemas ativos", "12%"],
+     ["HPP · alergias · HMA", "15%"], ["Exames", "13%"], ["Medicações", "13%"],
+     ["Antimicrobianos", "11%"], ["Hoje", "13%"], ["Pendências", "10%"]]
+      .forEach(([nome, largura]) => {
+        const th = document.createElement("th");
+        th.textContent = nome; th.style.width = largura;
+        linha.appendChild(th);
+      });
+    cabecalho.appendChild(linha);
+    tabela.appendChild(cabecalho);
+
+    const corpo = document.createElement("tbody");
+    lista.slice(f * POR_FOLHA, (f + 1) * POR_FOLHA).forEach(p => {
+      corpo.appendChild(linhaImpressa(p));
+    });
+    tabela.appendChild(corpo);
+    folha.appendChild(tabela);
+    alvo.appendChild(folha);
+  }
+}
+
+function linhaImpressa(p) {
+  const tr = document.createElement("tr");
+  tr.appendChild(celulaTexto(p.leito, "leito"));
+
+  const ident = document.createElement("td");
+  const dih = rotuloDih(p.internacao);
+  ident.append(negrito(p.nome || ""));
+  if (p.idade) ident.append(txt(", " + p.idade + "a"));
+  if (dih) { ident.append(txt("  ")); ident.append(negrito(dih)); }
+  tr.appendChild(ident);
+
+  tr.appendChild(celulaTexto(p.problemas));
+  tr.appendChild(celulaTexto(p.caso));
+  tr.appendChild(celulaTexto(p.exames));
+
+  const meds = document.createElement("td");
+  (p.medicacoes || []).filter(m => (m.texto || "").trim()).forEach((m, i) => {
+    if (i) meds.append(document.createElement("br"));
+    const trecho = document.createElement("span");
+    if (m.suspenso) trecho.className = "susp";
+    trecho.textContent = m.texto;
+    meds.appendChild(trecho);
+  });
+  tr.appendChild(meds);
+
+  const atbs = document.createElement("td");
+  (p.atbs || []).filter(a => (a.texto || "").trim()).forEach((a, i) => {
+    if (i) atbs.append(document.createElement("br"));
+    const dia = rotuloDia(a.inicio);
+    atbs.append(txt(a.texto + (dia ? " " + dia : " (falta data de início)")));
+  });
+  tr.appendChild(atbs);
+
+  tr.appendChild(celulaTexto(p.hoje));
+
+  const pend = document.createElement("td");
+  pend.append(txt(p.pendencias || ""));
+  pend.append(document.createElement("br"));
+  ["PA", "FC", "FR", "Tax", "SatO₂"].forEach(rotulo => {
+    pend.append(txt(rotulo + " "));
+    const risco = document.createElement("span");
+    risco.className = "manus";
+    risco.innerHTML = "&nbsp;";
+    pend.appendChild(risco);
+    pend.append(txt(" "));
+  });
+  tr.appendChild(pend);
+  return tr;
+}
+
+function celulaTexto(valor, classe) {
+  const td = document.createElement("td");
+  if (classe) td.className = classe;
+  td.textContent = valor || "";
+  return td;
+}
+function txt(s) { return document.createTextNode(s); }
+function negrito(s) { const b = document.createElement("b"); b.textContent = s; return b; }
+function meta(s) { const e = document.createElement("span"); e.className = "meta"; e.textContent = s; return e; }
+
+/* ------------------------------------------------- arquivo e avisos */
+function salvarArquivo() {
+  const pacote = { formato: "passometro-scls", versao: 1,
+                   exportado_em: new Date().toISOString(), dados: dados };
+  const blob = new Blob([JSON.stringify(pacote, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const d = new Date();
+  a.href = url;
+  a.download = "passometro-" + d.toISOString().slice(0, 10) + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  aviso("Arquivo salvo. Leve-o para o outro computador e use Abrir arquivo.");
+}
+
+function abrirArquivo(evento) {
+  const arquivo = evento.target.files[0];
+  if (!arquivo) return;
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    try {
+      const pacote = JSON.parse(leitor.result);
+      const novos = (pacote.dados && pacote.dados.pacientes) || pacote.pacientes;
+      if (!Array.isArray(novos)) throw new Error("sem lista de pacientes");
+      if (dados.pacientes.length &&
+          !confirm("Isto substitui os " + dados.pacientes.length +
+                   " paciente(s) que estão aqui. Continuar?")) return;
+      dados = { pacientes: novos };
+      salvar(); render();
+      aviso(novos.length + " paciente(s) carregado(s) do arquivo.");
+    } catch (erro) {
+      aviso("Não consegui ler esse arquivo: " + erro.message);
+    } finally {
+      evento.target.value = "";
+    }
+  };
+  leitor.readAsText(arquivo);
+}
+
+function limparTudo() {
+  if (!confirm("Apagar TODOS os pacientes deste navegador?\n\n" +
+               "Não dá para desfazer. Se quiser guardar, cancele e use Salvar arquivo.")) return;
+  dados = { pacientes: [] };
+  salvar(); render();
+}
+
+function resumo() {
+  const n = dados.pacientes.length;
+  const semData = dados.pacientes.filter(p => !p.internacao).length;
+  const atbSemData = dados.pacientes.reduce(
+    (soma, p) => soma + (p.atbs || []).filter(a => (a.texto || "").trim() && !a.inicio).length, 0);
+  const partes = [n + " paciente(s)"];
+  if (semData) partes.push(semData + " sem data de internação (DIH não calcula)");
+  if (atbSemData) partes.push(atbSemData + " antimicrobiano(s) sem data de início");
+  partes.push("dados só neste navegador — use Salvar arquivo para levar junto");
+  document.getElementById("dica").textContent = partes.join(" · ");
+}
+function aviso(texto) {
+  const d = document.getElementById("dica");
+  d.textContent = texto;
+  setTimeout(resumo, 6000);
+}
+
+window.addEventListener("beforeprint", renderFolhas);
+render();
+</script>
+</body>
+</html>
