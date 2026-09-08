@@ -310,6 +310,8 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
   <button onclick="ordenar()">Ordenar por leito</button>
   <span class="espaco"></span>
   <button onclick="window.print()">Imprimir</button>
+  <button id="btExamesFim" onclick="alternarExamesNoFim()"
+          title="Tira a coluna de exames da grade impressa e joga todos os exames para uma folha no fim">Exames no fim</button>
   <button class="forte" onclick="salvarArquivo()">Salvar backup</button>
   <button onclick="document.getElementById('arq').click()">Restaurar backup</button>
   <input type="file" id="arq" accept=".json" hidden onchange="abrirArquivo(event)">
@@ -382,10 +384,18 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
    que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
    minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
    olhando uma versao velha sem ter como saber. */
-const VERSAO = "2026-09-08-0030";
+const VERSAO = "2026-09-08-0724";
 
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
+const CHAVE_EXAMES_FIM = "passometro_scls_v1_exames_no_fim";
+
+/* Exame é o texto mais comprido da ficha e o menos consultado no corredor.
+   Ligado isto, ele sai da coluna de cada paciente e vira uma folha no fim —
+   a grade fica com seis colunas mais largas e cabe mais gente por folha. A
+   escolha fica gravada neste navegador. */
+let examesNoFim = false;
+try { examesNoFim = localStorage.getItem(CHAVE_EXAMES_FIM) === "1"; } catch (e) { }
 const FOLHAO_URL = "https://batistazz.github.io/gama/";
 // O folhão guarda tudo em localStorage sob esta chave. Ele mora em
 // batistazz.github.io/gama/ e este passômetro em .../passometro/ — MESMA
@@ -840,6 +850,23 @@ function renderFolhasAdiado() {
 }
 
 /* -------------------------------------------------------- impressão */
+function pintarBotaoExames() {
+  const botao = document.getElementById("btExamesFim");
+  if (!botao) return;
+  botao.textContent = examesNoFim ? "Exames no fim: sim" : "Exames no fim: não";
+  botao.className = examesNoFim ? "forte" : "";
+}
+
+function alternarExamesNoFim() {
+  examesNoFim = !examesNoFim;
+  try { localStorage.setItem(CHAVE_EXAMES_FIM, examesNoFim ? "1" : "0"); } catch (e) { }
+  pintarBotaoExames();
+  renderFolhas();
+  aviso(examesNoFim
+    ? "Impressão: os exames saem da grade e viram a última folha."
+    : "Impressão: os exames voltam para a coluna de cada paciente.");
+}
+
 /* A paginação é feita aqui, uma tabela por folha, para que o cabeçalho
    apareça em TODAS as páginas: o Chrome não repete <thead> de forma
    confiável entre páginas impressas. */
@@ -862,19 +889,32 @@ function renderFolhas() {
     return;
   }
 
-  const folhas = paginarPorAltura(lista, agora, carimbo);
+  naoCabem = [];
+  const folhas = paginarPorAltura(
+    lista, grupo => medirFolha(grupo, agora, carimbo, lista.length), true);
+
+  const comExames = examesNoFim
+    ? lista.filter(p => (p.exames || "").trim()) : [];
+  const folhasDeExames = comExames.length
+    ? paginarPorAltura(comExames, grupo =>
+        medirCaixa(agora, carimbo, lista.length, () => tabelaDeExames(grupo)), false)
+    : [];
+  const total = folhas.length + folhasDeExames.length;
+
   folhas.forEach((pagina, i) => {
     const folha = document.createElement("section");
     folha.className = "folha";
-    folha.append(cabecalhoDaFolha(agora, carimbo, i + 1, folhas.length, lista.length));
-    const tabela = tabelaDaFolha(pagina.larguras);
-    const corpo = document.createElement("tbody");
-    pagina.grupo.forEach(p => {
-      corpo.appendChild(linhaImpressa(p));
-      corpo.appendChild(linhaManuscrita(8));
-    });
-    tabela.appendChild(corpo);
-    folha.appendChild(tabela);
+    folha.append(cabecalhoDaFolha(agora, carimbo, i + 1, total, lista.length));
+    folha.appendChild(gradeDaFolha(pagina.grupo, pagina.larguras));
+    alvo.appendChild(folha);
+  });
+
+  folhasDeExames.forEach((pagina, i) => {
+    const folha = document.createElement("section");
+    folha.className = "folha";
+    folha.append(cabecalhoDaFolha(agora, carimbo, folhas.length + i + 1, total,
+                                  comExames.length, "EXAMES"));
+    folha.appendChild(tabelaDeExames(pagina.grupo));
     alvo.appendChild(folha);
   });
 }
@@ -906,30 +946,31 @@ function massaDaColuna(p) {
 }
 
 function largurasDaFolha(grupo) {
+  const colunas = colunasDaFolha().filter(i => i);   // o leito não cresce
   const massa = [0, 0, 0, 0, 0, 0, 0, 0];
   grupo.forEach(p => massaDaColuna(p).forEach((n, i) => { massa[i] += n; }));
-  const total = massa.reduce((a, b) => a + b, 0);
+  const total = colunas.reduce((a, i) => a + massa[i], 0);
   const larguras = LARGURA_MINIMA.slice();
-  let sobra = 100 - LARGURA_MINIMA.reduce((a, b) => a + b, 0);
+  let sobra = 100 - colunasDaFolha().reduce((a, i) => a + LARGURA_MINIMA[i], 0);
 
   if (total > 0) {
     let devolvido = 0;
-    for (let i = 1; i < 8; i++) {
+    colunas.forEach(i => {
       const pedido = larguras[i] + sobra * massa[i] / total;
       const dado = Math.min(LARGURA_MAXIMA[i], pedido);
       devolvido += pedido - dado;      // o que o teto recusou
       larguras[i] = dado;
-    }
+    });
     // O recusado volta para quem ainda tem folga, na mesma proporção.
     if (devolvido > 0.01) {
-      const folga = larguras.map((l, i) => i ? Math.max(0, LARGURA_MAXIMA[i] - l) : 0);
-      const somaFolga = folga.reduce((a, b) => a + b, 0);
+      const folga = [];
+      colunas.forEach(i => { folga[i] = Math.max(0, LARGURA_MAXIMA[i] - larguras[i]); });
+      const somaFolga = colunas.reduce((a, i) => a + folga[i], 0);
       if (somaFolga > 0)
-        for (let i = 1; i < 8; i++) larguras[i] += devolvido * folga[i] / somaFolga;
+        colunas.forEach(i => { larguras[i] += devolvido * folga[i] / somaFolga; });
     }
   }
-  const soma = larguras.reduce((a, b) => a + b, 0);
-  return larguras.map(x => (100 * x / soma).toFixed(1) + "%");
+  return percentuais(larguras);
 }
 
 /* Acima deste ponto do orçamento a folha está apertada e vale redistribuir a
@@ -946,6 +987,26 @@ function medirFolha(grupo, agora, carimbo, quantos) {
 }
 
 function medirComLargura(grupo, agora, carimbo, quantos, larguras) {
+  const medida = medirCaixa(agora, carimbo, quantos, () => gradeDaFolha(grupo, larguras));
+  medida.larguras = larguras;
+  return medida;
+}
+
+function gradeDaFolha(grupo, larguras) {
+  const tabela = tabelaDaFolha(larguras);
+  const corpo = document.createElement("tbody");
+  grupo.forEach(p => {
+    corpo.appendChild(linhaImpressa(p));
+    corpo.appendChild(linhaManuscrita(colunasDaFolha().length));
+  });
+  tabela.appendChild(corpo);
+  return tabela;
+}
+
+/* Monta a folha fora da tela e devolve a altura de verdade do corpo e o
+   orçamento da página. `montar` decide QUAL tabela é medida — a grade dos
+   pacientes ou a folha de exames. */
+function medirCaixa(agora, carimbo, quantos, montar) {
   const medidor = document.createElement("div");
   medidor.className = "passometro folha-a4";
   medidor.style.cssText = "position:absolute;left:-99999px;top:0;width:281mm;visibility:hidden";
@@ -953,13 +1014,8 @@ function medirComLargura(grupo, agora, carimbo, quantos, larguras) {
   folha.className = "folha";
   folha.style.height = "auto";
   const cabecalho = cabecalhoDaFolha(agora, carimbo, 1, 1, quantos);
-  const tabela = tabelaDaFolha(larguras);
-  const corpo = document.createElement("tbody");
-  grupo.forEach(p => {
-    corpo.appendChild(linhaImpressa(p));
-    corpo.appendChild(linhaManuscrita(8));
-  });
-  tabela.appendChild(corpo);
+  const tabela = montar();
+  const corpo = tabela.tBodies[0];
   folha.append(cabecalho, tabela);
   medidor.appendChild(folha);
   document.body.appendChild(medidor);
@@ -974,24 +1030,61 @@ function medirComLargura(grupo, agora, carimbo, quantos, larguras) {
   // branco. Calibrado contra a enfermaria real.
   return {
     altura: alturaCorpo,
-    orcamento: (ALTURA_UTIL_MM * PX_POR_MM - alturaCabecalho - alturaTitulos) * 0.92,
-    larguras: larguras
+    orcamento: (ALTURA_UTIL_MM * PX_POR_MM - alturaCabecalho - alturaTitulos) * 0.92
   };
 }
 
-function paginarPorAltura(lista, agora, carimbo) {
+/* A folha do fim: só leito, paciente e exames, uma linha por paciente. Ela
+   existe porque o exame é o texto mais comprido e o menos consultado durante
+   a visita — na coluna, ele espremia as outras seis; no fim, ele é uma folha
+   que se abre quando precisa. */
+const TITULOS_DE_EXAMES = [["Leito", "7%"], ["Paciente", "20%"], ["Exames", "73%"]];
+
+function tabelaDeExames(grupo) {
+  const tabela = document.createElement("table");
+  const cabecalho = document.createElement("thead");
+  const linha = document.createElement("tr");
+  TITULOS_DE_EXAMES.forEach(par => {
+    const th = document.createElement("th");
+    th.textContent = par[0];
+    th.style.width = par[1];
+    linha.appendChild(th);
+  });
+  cabecalho.appendChild(linha);
+  tabela.appendChild(cabecalho);
+
+  const corpo = document.createElement("tbody");
+  grupo.forEach(p => {
+    const tr = document.createElement("tr");
+    tr.appendChild(celulaTexto(p.leito, "leito"));
+    const ident = document.createElement("td");
+    ident.append(negrito(p.nome || ""));
+    const dih = rotuloDih(p.internacao);
+    if (dih) { ident.append(txt("  ")); ident.append(negrito(dih)); }
+    tr.appendChild(ident);
+    tr.appendChild(celulaTexto(p.exames));
+    tr.querySelectorAll("td").forEach(envolver);
+    corpo.appendChild(tr);
+  });
+  tabela.appendChild(corpo);
+  return tabela;
+}
+
+/* `medir` recebe um grupo e devolve { altura, orcamento, larguras }; é o que
+   permite paginar a grade e a folha de exames com a mesma conta, cada uma com
+   a sua tabela. `anotarSobra` marca quem, sozinho, não coube. */
+function paginarPorAltura(lista, medir, anotarSobra) {
   const folhas = [];
-  naoCabem = [];
   let i = 0;
   while (i < lista.length) {
     let grupo = [lista[i]];
-    let medida = medirFolha(grupo, agora, carimbo, lista.length);
+    let medida = medir(grupo);
 
     // Paciente cujo bloco sozinho não cabe: ele transborda e a página seguinte
     // sai sem cabeçalho. Nada é cortado — mas quem imprime precisa saber onde
     // está o excesso para poder encurtar, se quiser.
     if (medida.altura > medida.orcamento) {
-      naoCabem.push(lista[i].leito || lista[i].nome || "sem leito");
+      if (anotarSobra) naoCabem.push(lista[i].leito || lista[i].nome || "sem leito");
       folhas.push({ grupo: grupo, larguras: medida.larguras });
       i += 1;
       continue;
@@ -1000,7 +1093,7 @@ function paginarPorAltura(lista, agora, carimbo) {
     let j = i + 1;
     while (j < lista.length) {
       const tentativa = grupo.concat([lista[j]]);
-      const nova = medirFolha(tentativa, agora, carimbo, lista.length);
+      const nova = medir(tentativa);
       if (nova.altura > nova.orcamento) break;
       grupo = tentativa;
       medida = nova;
@@ -1014,9 +1107,10 @@ function paginarPorAltura(lista, agora, carimbo) {
 
 let naoCabem = [];
 
-function cabecalhoDaFolha(agora, carimbo, numero, total, pacientes) {
+function cabecalhoDaFolha(agora, carimbo, numero, total, pacientes, sufixo) {
   const titulo = document.createElement("h1");
-  titulo.append(txt("PASSÔMETRO — " + document.getElementById("servico").textContent));
+  titulo.append(txt("PASSÔMETRO" + (sufixo ? " · " + sufixo : "") + " — " +
+                    document.getElementById("servico").textContent));
   titulo.append(meta(agora.toLocaleDateString("pt-BR")));
   titulo.append(meta("gerado " + carimbo));
   if (pacientes) titulo.append(meta(pacientes + " paciente(s)"));
@@ -1029,16 +1123,36 @@ function cabecalhoDaFolha(agora, carimbo, numero, total, pacientes) {
 
 const TITULOS_DA_FOLHA = ["Leito", "Paciente · DIH · medicações", "Problemas ativos",
   "HPP · alergias · HMA", "Exames", "Antimicrobianos", "Hoje", "Pendências"];
-const LARGURA_PADRAO = ["6%", "19%", "13%", "16%", "14%", "11%", "12%", "9%"];
+const LARGURA_PADRAO = [6, 19, 13, 16, 14, 11, 12, 9];
+const COLUNA_DE_EXAMES = 4;
+
+/* Quais colunas a grade impressa leva. Com "Exames no fim" ligado, a coluna
+   de exames sai daqui — e todo o resto (títulos, larguras, massa, linha de
+   escrever à mão) segue esta lista, para não haver célula sem cabeçalho. */
+function colunasDaFolha() {
+  const todas = [0, 1, 2, 3, 4, 5, 6, 7];
+  return examesNoFim ? todas.filter(i => i !== COLUNA_DE_EXAMES) : todas;
+}
+
+/* Reparte 100% da largura entre as colunas que estão na folha. Sem isto, tirar
+   uma coluna deixaria a tabela somando 86% e a folha com uma faixa em branco. */
+function percentuais(numeros) {
+  const colunas = colunasDaFolha();
+  const soma = colunas.reduce((a, i) => a + numeros[i], 0) || 1;
+  const saida = [];
+  colunas.forEach(i => { saida[i] = (100 * numeros[i] / soma).toFixed(1) + "%"; });
+  return saida;
+}
 
 function tabelaDaFolha(larguras) {
   const tabela = document.createElement("table");
   const cabecalho = document.createElement("thead");
   const linha = document.createElement("tr");
-  TITULOS_DA_FOLHA.forEach((nome, i) => {
+  const padrao = percentuais(LARGURA_PADRAO);
+  colunasDaFolha().forEach(i => {
       const th = document.createElement("th");
-      th.textContent = nome;
-      th.style.width = (larguras || LARGURA_PADRAO)[i];
+      th.textContent = TITULOS_DA_FOLHA[i];
+      th.style.width = (larguras || padrao)[i];
       linha.appendChild(th);
     });
   cabecalho.appendChild(linha);
@@ -1048,7 +1162,8 @@ function tabelaDaFolha(larguras) {
 
 function linhaImpressa(p) {
   const tr = document.createElement("tr");
-  tr.appendChild(celulaTexto(p.leito, "leito"));
+  const celulas = [];
+  celulas[0] = celulaTexto(p.leito, "leito");
 
   const ident = document.createElement("td");
   const dih = rotuloDih(p.internacao);
@@ -1062,11 +1177,11 @@ function linhaImpressa(p) {
     trecho.textContent = m.texto;
     ident.appendChild(trecho);
   });
-  tr.appendChild(ident);
+  celulas[1] = ident;
 
-  tr.appendChild(celulaTexto(p.problemas));
-  tr.appendChild(celulaTexto(p.caso));
-  tr.appendChild(celulaTexto(p.exames));
+  celulas[2] = celulaTexto(p.problemas);
+  celulas[3] = celulaTexto(p.caso);
+  celulas[4] = celulaTexto(p.exames);
 
   const atbs = document.createElement("td");
   (p.atbs || []).filter(a => (a.texto || "").trim()).forEach((a, i) => {
@@ -1074,11 +1189,11 @@ function linhaImpressa(p) {
     const dia = rotuloDia(a.inicio);
     atbs.append(txt(a.texto + (dia ? " " + dia : " (falta data de início)")));
   });
-  tr.appendChild(atbs);
+  celulas[5] = atbs;
 
-  tr.appendChild(celulaTexto(p.hoje));
-
-  tr.appendChild(celulaTexto(p.pendencias));
+  celulas[6] = celulaTexto(p.hoje);
+  celulas[7] = celulaTexto(p.pendencias);
+  colunasDaFolha().forEach(i => tr.appendChild(celulas[i]));
   // Sem limite, o paciente com muito texto empurra os outros para a folha
   // seguinte e o cabeçalho some. O corte por LINHAS deixa reticências
   // visíveis; a íntegra continua na tela.
@@ -2254,6 +2369,7 @@ document.getElementById("versao").textContent = VERSAO;
 setTimeout(conferirVersao, 1500);
 
 window.addEventListener("beforeprint", renderFolhas);
+pintarBotaoExames();
 render();
 </script>
 </body>
