@@ -109,7 +109,11 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
    paciente e abre a ficha, que e' onde se escreve. A grade continua sendo
    o que imprime. */
 .lista-mini{display:none}
-@media (max-width:820px){
+/* `screen and` NAO e' decoracao: sem isso a regra vale tambem no papel, e
+   imprimir em RETRATO da' uma caixa de ~733px, mais estreita que 820 — a
+   lista do celular entrava impressa, com os nomes soltos no alto da folha,
+   e a grade sumia. Quem imprimiu em retrato viu isso. */
+@media screen and (max-width:820px){
   .rolagem{display:none}
   .lista-mini{display:block;padding:8px}
   .barra{gap:6px}
@@ -264,7 +268,9 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 /* ------------------------------------------------------- impressão */
 .folhas{display:none}
 @media print{
-  .barra,.dica,.rolagem,.acoes{display:none !important}
+  /* Tudo o que e' tela sai do papel. A lista-mini esta' aqui de proposito,
+     e nao so' na regra de largura: no papel o que vale e' a folha. */
+  .barra,.dica,.rolagem,.lista-mini,.acoes{display:none !important}
   .folhas{display:block}
   body{background:#fff;margin:0}
 }
@@ -376,7 +382,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
    que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
    minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
    olhando uma versao velha sem ter como saber. */
-const VERSAO = "2026-09-04-1851";
+const VERSAO = "2026-09-08-0030";
 
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
