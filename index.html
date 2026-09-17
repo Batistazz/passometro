@@ -127,7 +127,6 @@ td.lista .itens{padding:3px 5px;container-type:inline-size}
 .item .rot{font-size:10px;color:var(--fraca);text-transform:uppercase;letter-spacing:.3px}
 .item .dia.ultimo{color:#7a4b00;background:#ffe9a8;border-radius:3px;padding:0 3px}
 .item .dia.fim{font-weight:400;color:var(--fraca)}
-.item.encerrado .txt{text-decoration:line-through;color:var(--fraca)}
 .mini{border:1px solid var(--linha);background:#fff;color:var(--fraca);border-radius:4px;
       font-size:11px;padding:0 5px;cursor:pointer;line-height:18px}
 .mini:hover{background:var(--marca-clara);color:var(--marca)}
@@ -447,7 +446,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
    que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
    minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
    olhando uma versao velha sem ter como saber. */
-const VERSAO = "2026-09-16-2345";
+const VERSAO = "2026-09-17-0030";
 
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
@@ -542,7 +541,7 @@ let dados = carregar();
 function carregar() {
   try {
     const bruto = localStorage.getItem(CHAVE);
-    if (bruto) return JSON.parse(bruto);
+    if (bruto) return corrigirAnos(JSON.parse(bruto));
   } catch (e) { /* navegador sem localStorage: segue em memória */ }
   return { pacientes: [] };
 }
@@ -557,7 +556,40 @@ function comoData(iso) {
   if (!iso) return null;
   const [a, m, d] = iso.split("-").map(Number);
   if (!a || !m || !d) return null;
-  return new Date(a, m - 1, d);
+  // "0026" é o ano digitado com 2 dígitos; "0202" é digitação pela metade.
+  const ano = a < 100 ? 2000 + a : a;
+  if (ano < 1000) return null;
+  return new Date(ano, m - 1, d);
+}
+
+/* O campo de data do navegador aceita o ano com 2 dígitos e guarda "0026":
+   quem digitava "20/09/26" no fim do ATB via o antimicrobiano "encerrado",
+   riscado, sem D# — na tela e no papel. Ano de 2 dígitos é 20xx. */
+function anoCompleto(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!m || Number(m[1]) >= 100) return iso || "";
+  return String(2000 + Number(m[1])) + "-" + m[2] + "-" + m[3];
+}
+/* Corrige ao SAIR do campo: no meio da digitação o ano passa por 0002 e
+   0026, e reescrever ali atrapalharia quem digita os 4 dígitos. */
+function completarAnoAoSair(campo) {
+  campo.addEventListener("blur", () => {
+    const certo = anoCompleto(campo.value);
+    if (certo === campo.value) return;
+    campo.value = certo;
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+/* O que já foi gravado com o ano errado se conserta ao abrir. */
+function corrigirAnos(d) {
+  (d.pacientes || []).forEach(p => {
+    if (p.internacao) p.internacao = anoCompleto(p.internacao);
+    (p.atbs || []).forEach(a => {
+      if (a.inicio) a.inicio = anoCompleto(a.inicio);
+      if (a.fim) a.fim = anoCompleto(a.fim);
+    });
+  });
+  return d;
 }
 function diasDesde(iso) {
   const d = comoData(iso);
@@ -849,6 +881,7 @@ function celulaIdentidade(p) {
 
   const data = document.createElement("input");
   data.className = "data"; data.type = "date"; data.value = p.internacao || "";
+  completarAnoAoSair(data);
   data.title = "Data de internação — é daqui que sai o DIH";
 
   const dih = document.createElement("span");
@@ -944,6 +977,7 @@ function listaDeItens(p, chave, naFicha) {
       const campoData = (valor, dica) => {
         const campo = document.createElement("input");
         campo.className = "data"; campo.type = "date"; campo.value = valor || "";
+        completarAnoAoSair(campo);
         campo.title = dica;
         return campo;
       };
@@ -958,10 +992,12 @@ function listaDeItens(p, chave, naFicha) {
       const final = document.createElement("span");
       const pintar = () => {
         const e = estadoDoAtb(item);
-        dia.textContent = e.rotulo || "falta início";
+        // Terminado, o dia de hoje não conta mais: o D# que vale é o do fim.
+        dia.textContent = !e.rotulo ? "falta início" : e.encerrado ? "" : e.rotulo;
         dia.className = "dia" + (e.rotulo ? "" : " falta");
-        final.textContent = e.erro || (e.ultimo ? "último dia" : e.encerrado ? "encerrado"
-                                       : e.diaFinal ? "até " + e.diaFinal : "");
+        final.textContent = e.erro || (e.ultimo ? "último dia"
+          : e.encerrado ? "terminou" + (e.diaFinal ? " " + e.diaFinal : "")
+          : e.diaFinal ? "até " + e.diaFinal : "");
         final.className = "dia" + (e.erro ? " falta" : e.ultimo ? " ultimo" : " fim");
         div.classList.toggle("encerrado", e.encerrado);
       };
@@ -1404,9 +1440,6 @@ function linhaImpressa(p) {
   return tr;
 }
 
-/* No papel a data de fim vai por extenso ("até 02/09"): "D3/7" se lê de dois
-   jeitos quando o serviço conta do D0. Encerrado sai riscado e legível, como
-   a medicação suspensa. */
 /* No papel a alta vigilância vai escrita, com o que vigiar: impressão em
    preto e branco não depende de cor. */
 function marcaAV(item) {
@@ -1415,12 +1448,15 @@ function marcaAV(item) {
   return nota ? " (AV: " + nota + ")" : " (AV)";
 }
 
+/* No papel a data de fim vai por extenso ("até 02/09"): "D3/7" se lê de dois
+   jeitos quando o serviço conta do D0. O que já terminou continua na folha,
+   com o D# final e a data — não é riscado nem some. */
 function atbImpresso(a) {
   const e = estadoDoAtb(a);
   const trecho = document.createElement("span");
   let texto = a.texto + marcaAV(a) + " " + (e.rotulo || "(falta data de início)");
   if (e.erro) texto += " (confira a data de fim)";
-  else if (e.encerrado) { texto = a.texto + " — encerrado " + e.fim; trecho.className = "susp"; }
+  else if (e.encerrado) texto = a.texto + marcaAV(a) + " " + (e.diaFinal || "(falta data de início)") + " · terminou " + e.fim;
   else if (e.ultimo) texto += " · ÚLTIMO DIA";
   else if (e.fim) texto += " · até " + e.fim;
   trecho.textContent = texto;
@@ -1497,7 +1533,7 @@ function abrirArquivo(evento) {
       if (dados.pacientes.length &&
           !confirm("Isto substitui os " + dados.pacientes.length +
                    " paciente(s) que estão aqui. Continuar?")) return;
-      dados = { pacientes: novos };
+      dados = corrigirAnos({ pacientes: novos });
       // Ordem de leito, nao a ordem em que o arquivo foi escrito: a lista e'
       // a sequencia da visita.
       ordenar();
@@ -2163,6 +2199,7 @@ function blocoIdentidade(p) {
     const campo = document.createElement("input");
     campo.type = tipo;
     campo.value = p[chave] || "";
+    if (tipo === "date") completarAnoAoSair(campo);
     campo.oninput = () => {
       p[chave] = campo.value;
       if (document.activeElement !== linha) linha.value = linhaDeIdentidade(p);
