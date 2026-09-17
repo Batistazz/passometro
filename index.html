@@ -132,6 +132,14 @@ td.lista .itens{padding:3px 5px;container-type:inline-size}
       font-size:11px;padding:0 5px;cursor:pointer;line-height:18px}
 .mini:hover{background:var(--marca-clara);color:var(--marca)}
 .mini.on{background:var(--marca);color:#fff;border-color:var(--marca)}
+/* AV: medicação que a equipe marcou para observar com mais frequência. */
+.mini.av{font-weight:700;letter-spacing:.3px;opacity:.55}
+.mini.av.ligado,.mini.av.ligado:hover{background:var(--alerta);color:#fff;border-color:var(--alerta);opacity:1}
+.item.alta .txt{font-weight:700}
+.item .nota-av{flex:1 1 100%;order:4;min-width:0;border:0;border-bottom:1px dotted var(--alerta);
+               background:#fff6f5;color:var(--alerta);font:inherit;font-size:11px;padding:1px 3px;outline:none}
+.item .nota-av:focus{background:#fffbe6}
+.item.suspenso .mini.av,.item.encerrado .mini.av{opacity:.45}
 .add{font-size:11px;color:var(--marca);cursor:pointer;border:0;background:none;padding:2px 0}
 .add:hover{text-decoration:underline}
 
@@ -246,6 +254,9 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
 .ficha .item.atb .datas .data{width:140px}
 .ficha .item.atb .datas > *{order:0 !important}
 .ficha .item .rot{font-size:11px}
+/* Marcada para vigiar, a medicação ganha a linha do "o que vigiar" embaixo. */
+.ficha .item.alta{flex-wrap:wrap}
+.ficha .item .nota-av{font-size:13px;padding:3px 6px}
 /* A celula inteira abre o paciente. Antes o botao era uma barra de 6px no
    topo de uma celula que pode ter 200px: era preciso mirar. */
 td.leito{padding:0}
@@ -306,6 +317,12 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
 .varios .previa td.leito{font-weight:700}
 .varios .previa .falta{color:var(--fraca);font-style:italic}
 .folhao-vazio{padding:16px;border:1px solid var(--linha);border-radius:8px;background:#fffbe6}
+.tabela-av{width:100%;border-collapse:collapse;font-size:13px}
+.tabela-av thead th{position:static;text-align:left;padding:5px 8px}
+.tabela-av td{padding:5px 8px;border:0;border-bottom:1px solid var(--linha);overflow-wrap:anywhere}
+.tabela-av tbody tr{cursor:pointer}
+.tabela-av tbody tr:hover td{background:var(--marca-clara)}
+.tabela-av td.leito-av{font-weight:700;color:var(--marca);white-space:nowrap}
 .folhao-vazio p{margin:0 0 10px;line-height:1.5}
 @media print{.ficha{display:none !important}}
 
@@ -359,6 +376,8 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
   <button class="forte" onclick="salvarArquivo()">Salvar backup</button>
   <button onclick="document.getElementById('arq').click()">Restaurar backup</button>
   <input type="file" id="arq" accept=".json" hidden onchange="abrirArquivo(event)">
+  <button id="btAV" onclick="abrirAltaVigilancia()"
+          title="Medicações que a equipe marcou para observar com mais frequência">Alta vigilância</button>
   <button onclick="abrirFolhao()">Exames do folhão</button>
   <button onclick="window.open(FOLHAO_URL,'_blank','noopener')" title="Abre o folhão numa aba nova, para importar laudos">Abrir folhão ↗</button>
   <input type="file" id="folhaoArq" accept=".json" hidden onchange="importarFolhao(event)">
@@ -428,7 +447,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
    que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
    minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
    olhando uma versao velha sem ter como saber. */
-const VERSAO = "2026-09-16-2200";
+const VERSAO = "2026-09-16-2345";
 
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
@@ -667,6 +686,12 @@ function estadoDoAtb(item) {
   return estado;
 }
 
+/* -------------------------------------------------- alta vigilância
+   Medicação que a equipe decidiu observar com mais frequência — nível sérico,
+   INR, glicemia, pressão. É marca da equipe, não de lista: nada é marcado
+   sozinho. `item.av` liga a marca e `item.avNota` diz o que vigiar. */
+function altaVigilancia(item) { return !!(item && item.av === true); }
+
 /* --------------------------------------------------------- paciente */
 function pacienteVazio() {
   return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -857,7 +882,7 @@ function celulaLista(p, chave) {
   return td;
 }
 
-function listaDeItens(p, chave) {
+function listaDeItens(p, chave, naFicha) {
   const caixa = document.createElement("div");
   caixa.className = "itens";
   const eAtb = chave === "atbs";
@@ -885,24 +910,33 @@ function listaDeItens(p, chave) {
     };
     requestAnimationFrame(() => crescerItem(texto));
 
-    /* Colar um bloco do prontuário vira uma linha por item, em vez de tudo
-       espremido num campo só. Nada é interpretado: cada linha entra como
-       está. Uma linha só continua sendo uma colagem normal. */
-    texto.onpaste = evento => {
-      const colado = (evento.clipboardData || window.clipboardData).getData("text") || "";
-      const linhas = colado.split(/\r?\n/).map(l => l.trim().replace(/^[-•*\s]+/, "")).filter(Boolean);
-      if (linhas.length < 2) return;
-      evento.preventDefault();
-      item.texto = linhas[0];
-      const novos = linhas.slice(1).map(l => eAtb ? { texto: l, inicio: "" }
-                                                  : { texto: l, suspenso: false });
-      p[chave].splice(indice + 1, 0, ...novos);
-      salvar();
-      if (fichaAberta) renderFicha(); else render();
-      aviso(linhas.length + " item(ns) colado(s) do prontuário.");
+    /* Alta vigilância. Na ficha o botão fica sempre; na grade só aparece na
+       medicação marcada. Marcada, ganha uma linha para dizer o que vigiar. */
+    const av = document.createElement("button");
+    av.textContent = "AV";
+    const nota = document.createElement("input");
+    nota.className = "nota-av";
+    nota.placeholder = "o que vigiar — ex.: INR diário, nível antes da 4ª dose";
+    nota.value = item.avNota || "";
+    nota.oninput = () => { item.avNota = nota.value; salvarAdiado(); renderFolhasAdiado(); };
+    const pintarAV = () => {
+      const ligado = altaVigilancia(item);
+      av.className = "mini av" + (ligado ? " ligado" : "");
+      av.hidden = !naFicha && !ligado;
+      av.title = ligado ? "Em alta vigilância — clique para tirar"
+                        : "Marcar para alta vigilância: observar com mais frequência";
+      nota.hidden = !ligado;
+      div.classList.toggle("alta", ligado);
     };
+    av.onclick = () => {
+      item.av = !altaVigilancia(item);
+      pintarAV();
+      if (item.av) nota.focus();
+      salvar(); resumo(); renderFolhasAdiado();
+    };
+    pintarAV();
 
-    div.appendChild(texto);
+    div.append(texto, av);
 
     let datas = null;
     if (eAtb) {
@@ -968,6 +1002,7 @@ function listaDeItens(p, chave) {
     tirar.onclick = () => { p[chave].splice(indice, 1); salvar(); if (fichaAberta) renderFicha(); else render(); };
     div.appendChild(tirar);
     if (datas) div.appendChild(datas);
+    div.appendChild(nota);
 
     caixa.appendChild(div);
   });
@@ -1038,6 +1073,8 @@ function renderFolhas() {
   const alvo = document.getElementById("folhas");
   alvo.textContent = "";
   const lista = dados.pacientes;
+  const av = itensAV();
+  legendaAV = av.length ? "(AV) = alta vigilância" : "";
   const agora = new Date();
   const carimbo = agora.toLocaleDateString("pt-BR") + " " +
     agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -1270,6 +1307,7 @@ function paginarPorAltura(lista, medir, anotarSobra) {
 }
 
 let naoCabem = [];
+let legendaAV = "";
 
 function cabecalhoDaFolha(agora, carimbo, numero, total, pacientes, sufixo) {
   const titulo = document.createElement("h1");
@@ -1278,6 +1316,7 @@ function cabecalhoDaFolha(agora, carimbo, numero, total, pacientes, sufixo) {
   titulo.append(meta(agora.toLocaleDateString("pt-BR")));
   titulo.append(meta("gerado " + carimbo));
   if (pacientes) titulo.append(meta(pacientes + " paciente(s)"));
+  if (!sufixo && legendaAV) titulo.append(meta(legendaAV));
   const folio = document.createElement("span");
   folio.className = "folio";
   folio.textContent = "folha " + numero + " de " + total;
@@ -1338,7 +1377,8 @@ function linhaImpressa(p) {
     ident.append(document.createElement("br"));
     const trecho = document.createElement("span");
     if (m.suspenso) trecho.className = "susp";
-    trecho.textContent = m.texto;
+    trecho.textContent = m.texto + marcaAV(m);
+    if (!m.suspenso && altaVigilancia(m)) trecho.style.fontWeight = "700";
     ident.appendChild(trecho);
   });
   celulas[1] = ident;
@@ -1367,10 +1407,18 @@ function linhaImpressa(p) {
 /* No papel a data de fim vai por extenso ("até 02/09"): "D3/7" se lê de dois
    jeitos quando o serviço conta do D0. Encerrado sai riscado e legível, como
    a medicação suspensa. */
+/* No papel a alta vigilância vai escrita, com o que vigiar: impressão em
+   preto e branco não depende de cor. */
+function marcaAV(item) {
+  if (!altaVigilancia(item)) return "";
+  const nota = (item.avNota || "").trim();
+  return nota ? " (AV: " + nota + ")" : " (AV)";
+}
+
 function atbImpresso(a) {
   const e = estadoDoAtb(a);
   const trecho = document.createElement("span");
-  let texto = a.texto + " " + (e.rotulo || "(falta data de início)");
+  let texto = a.texto + marcaAV(a) + " " + (e.rotulo || "(falta data de início)");
   if (e.erro) texto += " (confira a data de fim)";
   else if (e.encerrado) { texto = a.texto + " — encerrado " + e.fim; trecho.className = "susp"; }
   else if (e.ultimo) texto += " · ÚLTIMO DIA";
@@ -1482,6 +1530,7 @@ function resumo() {
     a => (a.texto || "").trim() && estadoDoAtb(a).ultimo));
   if (ultimoDia.length)
     partes.push("último dia de ATB hoje: " + ultimoDia.map(p => p.leito || p.nome || "sem leito").join(", "));
+  pintarBotaoAV();
   let quando = null;
   try { quando = localStorage.getItem(CHAVE_BACKUP); } catch (e) {}
   const dica = document.getElementById("dica");
@@ -1650,10 +1699,10 @@ function renderFicha() {
     campoFicha(p, "caso", "HPP · alergias · HMA", 5)));
 
   conteudo.appendChild(blocoFicha("Tratamento",
-    rotuloSolto("Medicações — o botão riscar marca a suspensa, sem apagar"),
-    listaDeItens(p, "medicacoes"),
+    rotuloSolto("Medicações — riscar marca a suspensa, sem apagar; AV marca para vigiar com mais frequência"),
+    listaDeItens(p, "medicacoes", true),
     rotuloSolto("Antimicrobianos — com a data de início o D# aparece sozinho; marque o fim quando estiver definido"),
-    listaDeItens(p, "atbs")));
+    listaDeItens(p, "atbs", true)));
 
   conteudo.appendChild(blocoFicha("Exames",
     campoFicha(p, "exames", "Resultados", 5,
@@ -2344,6 +2393,108 @@ function blocosDoFolhao(banco) {
       };
     })
     .sort((a, b) => chaveLeito(a.leito).localeCompare(chaveLeito(b.leito)));
+}
+
+/* ============================================== aba: alta vigilância
+   A enfermaria inteira de uma vez: o que a equipe marcou para observar com
+   mais frequência, e o que observar. Clicar na linha abre a ficha. */
+
+/* Marcadas e em uso, na ordem da enfermaria. Medicação riscada e
+   antimicrobiano encerrado ficam de fora. */
+function itensAV() {
+  const lista = [];
+  dados.pacientes.forEach(p => {
+    (p.medicacoes || []).forEach(m => {
+      if ((m.texto || "").trim() && !m.suspenso && altaVigilancia(m)) lista.push({ p: p, item: m });
+    });
+    (p.atbs || []).forEach(a => {
+      if ((a.texto || "").trim() && !estadoDoAtb(a).encerrado && altaVigilancia(a)) lista.push({ p: p, item: a });
+    });
+  });
+  return lista;
+}
+
+function pintarBotaoAV() {
+  const botao = document.getElementById("btAV");
+  const total = itensAV().length;
+  if (botao) botao.textContent = "Alta vigilância" + (total ? " (" + total + ")" : "");
+}
+
+function tabelaAV(itens) {
+  const tabela = document.createElement("table");
+  tabela.className = "tabela-av";
+  const cabeca = document.createElement("tr");
+  ["Leito", "Paciente", "Medicação", "O que vigiar"].forEach(t => {
+    const th = document.createElement("th"); th.textContent = t; cabeca.appendChild(th);
+  });
+  const thead = document.createElement("thead");
+  thead.appendChild(cabeca);
+  const corpo = document.createElement("tbody");
+  let anterior = null;
+  itens.forEach(x => {
+    const tr = document.createElement("tr");
+    tr.title = "Abrir a ficha de " + (x.p.nome || x.p.leito || "paciente");
+    tr.onclick = () => abrirFicha(x.p.id);
+    const novo = x.p !== anterior;
+    anterior = x.p;
+    [novo ? (x.p.leito || "—") : "", novo ? (x.p.nome || "(sem nome)") : "", x.item.texto,
+     (x.item.avNota || "").trim() || "—"].forEach((valor, i) => {
+      const td = document.createElement("td");
+      td.textContent = valor;
+      if (i === 0) td.className = "leito-av";
+      tr.appendChild(td);
+    });
+    corpo.appendChild(tr);
+  });
+  tabela.append(thead, corpo);
+  return tabela;
+}
+
+function abrirAltaVigilancia() {
+  const alvo = document.getElementById("ficha");
+  alvo.hidden = false;
+  alvo.textContent = "";
+  fichaAberta = null;
+  fichaDesenhada = null;
+
+  const papel = document.createElement("div");
+  papel.className = "papel";
+  const topo = document.createElement("div");
+  topo.className = "topo";
+  const titulo = document.createElement("span");
+  titulo.className = "nome"; titulo.textContent = "Alta vigilância";
+  const espaco = document.createElement("span"); espaco.className = "espaco";
+  const fechar = document.createElement("button");
+  fechar.textContent = "Voltar à enfermaria";
+  fechar.title = "Ou clique fora, ou aperte Esc";
+  fechar.onclick = () => { alvo.hidden = true; };
+  topo.append(titulo, espaco, fechar);
+
+  const conteudo = document.createElement("div");
+  conteudo.className = "conteudo";
+  const explica = document.createElement("div");
+  explica.className = "ajuda";
+  explica.style.margin = "0 0 12px";
+  explica.textContent = "Medicações e antimicrobianos que a equipe marcou para observar com mais " +
+    "frequência. Para marcar ou tirar, abra o paciente e use o botão AV ao lado da medicação. " +
+    "Medicação riscada e antimicrobiano encerrado não entram.";
+  conteudo.appendChild(explica);
+
+  const lista = itensAV();
+  if (!lista.length) {
+    const vazio = document.createElement("div");
+    vazio.className = "folhao-vazio";
+    vazio.textContent = "Nenhuma medicação em alta vigilância na enfermaria.";
+    conteudo.appendChild(vazio);
+  } else {
+    const pacientes = new Set(lista.map(x => x.p)).size;
+    conteudo.appendChild(blocoFicha(lista.length + " medicação(ões) em " + pacientes + " paciente(s)",
+      tabelaAV(lista)));
+  }
+
+  papel.append(topo, conteudo);
+  alvo.appendChild(papel);
+  alvo.scrollTop = 0;
 }
 
 function abrirFolhao() {
