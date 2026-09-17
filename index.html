@@ -51,12 +51,19 @@ button.perigo{border-color:#ffc9c6;color:#ffe3e1}
 .dica.urgente{background:#fdecea;border-bottom-color:#f0b4ae;color:#8c1d18;font-weight:600}
 
 /* ---------------------------------------------------------- grade */
-.rolagem{overflow:auto;padding:10px}
-table{border-collapse:collapse;background:#fff;table-layout:fixed;width:1730px}
+/* A grade cabe na largura da tela. Antes ela tinha 1730px fixos: num monitor
+   de 1366px sobravam 385px escondidos à direita, e a barra de rolagem lateral
+   ficava no pé da tabela, depois do último leito. Agora as colunas são
+   porcentagem e o texto quebra para baixo — a página só rola na vertical. */
+.rolagem{padding:10px}
+table{border-collapse:collapse;background:#fff;table-layout:fixed;width:100%}
 th,td{border:1px solid var(--linha);vertical-align:top;padding:0}
 thead th{position:sticky;top:0;z-index:10;background:var(--marca);color:#fff;
          font-size:11px;text-transform:uppercase;letter-spacing:.3px;
          padding:6px 4px;text-align:center}
+/* Sem a rolagem própria, o título das colunas gruda no alto da PÁGINA — logo
+   abaixo da barra e da faixa de aviso, e não atrás delas. */
+#grade thead th{top:var(--altura-topo,0px);overflow-wrap:anywhere}
 tbody tr:nth-child(even) td{background:#fafbfc}
 
 .campo{width:100%;min-height:26px;padding:4px 5px;font:inherit;font-size:12px;
@@ -71,7 +78,7 @@ td.leito .campo{font-weight:700;font-size:15px;text-align:center}
 .ident input:focus{background:#fffbe6;border-bottom-color:var(--marca)}
 .ident .nome{width:100%;font-weight:700;text-transform:uppercase}
 .ident .idade{width:34px;text-align:center}
-.ident .data{width:105px}
+.ident .data{width:105px;max-width:100%;min-width:0}
 .ident .linha2{margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;
                font-size:11px;color:var(--fraca)}
 .dih{font-weight:700;font-size:13px;color:var(--marca);background:var(--marca-clara);
@@ -79,19 +86,48 @@ td.leito .campo{font-weight:700;font-size:15px;text-align:center}
 
 /* medicações e ATB: lista de itens dentro da célula */
 .itens{padding:3px 0;font-size:12px}
+/* A coluna de ATB não tem a margem que a identificação tem. */
+td.lista .itens{padding:3px 5px;container-type:inline-size}
 .rotulo-med{margin-top:5px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;
             color:var(--fraca);border-top:1px dotted var(--linha);padding-top:3px}
 .item{display:flex;gap:4px;align-items:center;margin-bottom:4px;flex-wrap:wrap}
-.item input.txt{flex:1 1 100%}
-.item textarea,.item input.txt{flex:1;border:0;border-bottom:1px dotted var(--linha);
-     background:transparent;font:inherit;font-size:12px;padding:1px 2px;outline:none;
-     resize:none;overflow:hidden}
-.item input.txt:focus,.item textarea:focus{background:#fffbe6}
-.item.suspenso input.txt,.item.suspenso textarea{text-decoration:line-through;color:var(--fraca)}
+/* O nome do item QUEBRA LINHA em vez de sumir dentro do campo: com a grade
+   do tamanho da tela a coluna estreitou, e "Enoxaparina 40mg SC 1x/dia"
+   aparecia só até o "SC". */
+.item .txt{flex:1;min-width:0;width:auto;border:0;border-bottom:1px dotted var(--linha);
+     background:transparent;font:inherit;font-size:12px;line-height:1.3;padding:1px 2px;
+     outline:none;resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;
+     display:block}
+.item .txt:focus{background:#fffbe6}
+.item.suspenso .txt{text-decoration:line-through;color:var(--fraca)}
 .item .data{width:88px;border:0;border-bottom:1px dotted var(--linha);background:transparent;
             font:inherit;font-size:11px;outline:none;color:var(--fraca)}
 .item .dia{min-width:30px;text-align:center;font-weight:700;font-size:11px;color:var(--marca)}
 .item .dia.falta{color:var(--alerta);font-weight:400;font-style:italic;min-width:auto}
+/* Antimicrobiano: nome e ✕ numa linha; embaixo, início e fim.
+   Coluna estreita (o padrão, e o que vale em navegador antigo): o rótulo e o
+   dia numa linha, a data inteira embaixo — senão a data vira "14/0".
+   Coluna larga: rótulo, data e dia na mesma linha. */
+.item.atb .txt{order:1}
+.item.atb > .mini{order:2;align-self:flex-start}
+.item.atb .datas{order:3;flex:1 1 100%;display:grid;grid-template-columns:auto minmax(0,1fr);
+                 gap:0 4px;align-items:center}
+.item.atb .datas .data{width:100%;grid-column:1 / -1;margin-bottom:2px}
+.item.atb .datas > :nth-child(1){order:1}
+.item.atb .datas > :nth-child(3){order:2;justify-self:end}
+.item.atb .datas > :nth-child(2){order:3}
+.item.atb .datas > :nth-child(4){order:4}
+.item.atb .datas > :nth-child(6){order:5;justify-self:end}
+.item.atb .datas > :nth-child(5){order:6}
+@container (min-width:210px){
+  .item.atb .datas{grid-template-columns:auto minmax(0,1fr) auto}
+  .item.atb .datas .data{grid-column:auto;margin-bottom:0}
+  .item.atb .datas > *{order:0 !important}
+}
+.item .rot{font-size:10px;color:var(--fraca);text-transform:uppercase;letter-spacing:.3px}
+.item .dia.ultimo{color:#7a4b00;background:#ffe9a8;border-radius:3px;padding:0 3px}
+.item .dia.fim{font-weight:400;color:var(--fraca)}
+.item.encerrado .txt{text-decoration:line-through;color:var(--fraca)}
 .mini{border:1px solid var(--linha);background:#fff;color:var(--fraca);border-radius:4px;
       font-size:11px;padding:0 5px;cursor:pointer;line-height:18px}
 .mini:hover{background:var(--marca-clara);color:var(--marca)}
@@ -199,9 +235,17 @@ td.acoes button:hover{background:#fff0ef;color:var(--alerta);border-color:var(--
 .ficha .rodape .espaco{margin-left:auto}
 .ficha .itens{padding:2px 0}
 .ficha .item{flex-wrap:nowrap;gap:8px}
-.ficha .item input.txt{flex:1 1 auto}
+.ficha .item .txt{flex:1 1 auto}
 .ficha .item .data{width:140px;border:1px solid var(--linha);border-radius:5px;padding:4px 6px}
 .ficha .item .dia{min-width:44px;font-size:13px}
+/* Na ficha há largura: nome, início e fim na mesma linha; quebra no celular. */
+.ficha .item.atb{flex-wrap:wrap;border-bottom:1px dotted var(--linha);padding-bottom:5px}
+.ficha .item.atb .txt{flex:1 1 260px}
+.ficha .item.atb .datas{order:2;flex:0 1 auto;display:flex;flex-wrap:wrap;gap:4px 8px}
+.ficha .item.atb > .mini{order:3}
+.ficha .item.atb .datas .data{width:140px}
+.ficha .item.atb .datas > *{order:0 !important}
+.ficha .item .rot{font-size:11px}
 /* A celula inteira abre o paciente. Antes o botao era uma barra de 6px no
    topo de uma celula que pode ter 200px: era preciso mirar. */
 td.leito{padding:0}
@@ -329,15 +373,15 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
   <table id="grade">
     <thead>
       <tr>
-        <th style="width:70px">Leito</th>
-        <th style="width:250px">Paciente · DIH · medicações</th>
-        <th style="width:220px">Problemas ativos</th>
-        <th style="width:250px">HPP · alergias · HMA</th>
-        <th style="width:240px">Exames</th>
-        <th style="width:220px">Antimicrobianos</th>
-        <th style="width:250px">Hoje: evolução · avaliação · conduta</th>
-        <th style="width:196px">Pendências</th>
-        <th style="width:34px"></th>
+        <th style="width:62px">Leito</th>
+        <th style="width:16%">Paciente · DIH · medicações</th>
+        <th style="width:13%">Problemas ativos</th>
+        <th style="width:15%">HPP · alergias · HMA</th>
+        <th style="width:14%">Exames</th>
+        <th style="width:15%">Antimicrobianos</th>
+        <th style="width:15%">Hoje: evolução · avaliação · conduta</th>
+        <th style="width:12%">Pendências</th>
+        <th style="width:32px"></th>
       </tr>
     </thead>
     <tbody id="corpo"></tbody>
@@ -384,7 +428,7 @@ td.leito .sem{color:var(--fraca);font-weight:400;font-size:12px}
    que existe versao nova. O GitHub manda o navegador guardar a pagina por 10
    minutos, e no celular costuma durar bem mais — sem isto, a pessoa fica
    olhando uma versao velha sem ter como saber. */
-const VERSAO = "2026-09-08-0724";
+const VERSAO = "2026-09-16-2200";
 
 const CHAVE = "passometro_scls_v1";
 const CHAVE_BACKUP = "passometro_scls_v1_ultimo_backup";
@@ -547,6 +591,81 @@ function acharDataNoTexto(texto) {
 }
 
 function rotuloDia(iso) { const n = diasDesde(iso); return n === null ? null : "D" + n; }
+
+function isoDe(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+         String(d.getDate()).padStart(2, "0");
+}
+function dataCurta(iso) { return iso ? iso.split("-").reverse().slice(0, 2).join("/") : ""; }
+
+/* "até 02/09", "fim 02/09", "término em 02/09": a data depois dessas palavras
+   é o ÚLTIMO dia. Sem isto, "Ceftriaxona 26/08 até 02/09" começava em 02/09,
+   porque a leitura do início fica com a última data da linha. O fim pode
+   estar no futuro (é o normal); sem ano escrito, vale o ano que deixa a data
+   mais perto de hoje. Fim antes do início não é aceito: fica no texto. */
+const FIM_NO_TEXTO = /(^|[\s(\[,;-])(?:at[eé]|fim|t[eé]rmino|termina|encerra|previs[aã]o de t[eé]rmino)(?:\s+(?:em|no dia|dia))?\s+(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?(?![\s]*[h:\/\d])/i;
+
+function acharFimNoTexto(texto, inicioIso) {
+  const m = FIM_NO_TEXTO.exec(texto);
+  if (!m) return null;
+  const dia = Number(m[2]), mes = Number(m[3]);
+  if (dia < 1 || dia > 31 || mes < 1 || mes > 12) return null;
+  const hj = hoje();
+  let anos = [hj.getFullYear() - 1, hj.getFullYear(), hj.getFullYear() + 1];
+  if (m[4]) anos = [Number(m[4]) < 100 ? Number(m[4]) + 2000 : Number(m[4])];
+  let melhor = null;
+  anos.forEach(ano => {
+    const d = new Date(ano, mes - 1, dia);
+    if (d.getMonth() !== mes - 1 || d.getDate() !== dia) return;     // 31/02
+    const distancia = (d - hj) / 86400000;
+    if (distancia < -120 || distancia > 240) return;
+    if (!melhor || Math.abs(distancia) < Math.abs((melhor - hj) / 86400000)) melhor = d;
+  });
+  if (!melhor) return null;
+  const iso = isoDe(melhor);
+  if (inicioIso && iso < inicioIso) return null;
+  let fimDoTrecho = m.index + m[0].length;
+  // "(até 02/09)" não deixa o parêntese órfão para trás.
+  if (/[(\[]/.test(m[1]) && /^\s*[)\]]/.test(texto.slice(fimDoTrecho)))
+    fimDoTrecho += texto.slice(fimDoTrecho).indexOf(texto.slice(fimDoTrecho).trim()[0]) + 1;
+  const limpo = (texto.slice(0, m.index) + " " + texto.slice(fimDoTrecho))
+    .replace(/\s{2,}/g, " ")
+    .replace(/[\s(\[,;-]+$/, "")
+    .trim();
+  return { iso: iso, texto: limpo };
+}
+
+/* As datas escritas no texto de um antimicrobiano. Só devolve o que o item
+   ainda não tem — data já preenchida à mão manda. Nada lido: null. */
+function lerDatasDoAtb(texto, item) {
+  const jaTem = item || {};
+  // O fim sai primeiro: se ficasse no texto, a leitura do início o pegaria.
+  const fim = jaTem.fim ? null : acharFimNoTexto(texto, jaTem.inicio);
+  let resto = fim ? fim.texto : texto;
+  const ini = jaTem.inicio ? null : acharDataNoTexto(resto);
+  if (ini) resto = ini.texto;
+  if (fim && ini && fim.iso < ini.iso) return null;   // na dúvida, nada muda
+  if (!fim && !ini) return null;
+  return { texto: resto, inicio: ini ? ini.iso : "", fim: fim ? fim.iso : "" };
+}
+
+/* Onde o antimicrobiano está hoje, a partir das duas datas escritas. Sem data
+   de fim não há último dia (D11): nada é suposto pela droga ou pela dose. */
+function estadoDoAtb(item) {
+  const dia = diasDesde(item.inicio);
+  const estado = { rotulo: dia === null ? null : "D" + dia, fim: "", diaFinal: "",
+                   ultimo: false, encerrado: false, erro: "" };
+  const dFim = comoData(item.fim);
+  if (!dFim) return estado;
+  const dInicio = comoData(item.inicio);
+  if (dInicio && dInicio > dFim) { estado.erro = "fim antes do início"; return estado; }
+  const passou = diasDesde(item.fim);          // negativo: o fim ainda vem
+  estado.fim = dataCurta(item.fim);
+  if (dia !== null) estado.diaFinal = "D" + (dia - passou);
+  estado.ultimo = passou === 0;
+  estado.encerrado = passou > 0;
+  return estado;
+}
 
 /* --------------------------------------------------------- paciente */
 function pacienteVazio() {
@@ -733,6 +852,7 @@ function celulaIdentidade(p) {
    Antimicrobiano tem data de início, e o dia se calcula sozinho. */
 function celulaLista(p, chave) {
   const td = document.createElement("td");
+  td.className = "lista";
   td.appendChild(listaDeItens(p, chave));
   return td;
 }
@@ -747,27 +867,23 @@ function listaDeItens(p, chave) {
     const div = document.createElement("div");
     div.className = "item" + (item.suspenso ? " suspenso" : "");
 
-    const texto = document.createElement("input");
+    // Caixa de texto que cresce, e não campo de uma linha: o nome quebra
+    // em vez de ficar escondido. Continua sendo um item só — Enter não
+    // abre linha nova.
+    const texto = document.createElement("textarea");
     texto.className = "txt";
+    texto.rows = 1;
     texto.value = item.texto || "";
-    texto.placeholder = eAtb ? "droga, dose, via e a data de início"
+    texto.placeholder = eAtb ? "droga, dose, via — ex.: 26/08 até 02/09"
                          : "medicação, dose, via";
+    texto.onkeydown = evento => { if (evento.key === "Enter") evento.preventDefault(); };
     texto.oninput = () => {
+      if (/\n/.test(texto.value)) texto.value = texto.value.replace(/\s*\n\s*/g, " ");
       item.texto = texto.value;
-      // No antimicrobiano, a data escrita junto do nome vira data de início.
-      // Só quando ainda não há uma: preenchida à mão, ela manda.
-      if (eAtb && !item.inicio) {
-        const achado = acharDataNoTexto(texto.value);
-        if (achado) {
-          item.inicio = achado.iso;
-          item.texto = achado.texto;
-          salvar();
-          if (fichaAberta) renderFicha(); else render();
-          return;
-        }
-      }
+      crescerItem(texto);
       salvarAdiado();
     };
+    requestAnimationFrame(() => crescerItem(texto));
 
     /* Colar um bloco do prontuário vira uma linha por item, em vez de tudo
        espremido num campo só. Nada é interpretado: cada linha entra como
@@ -788,19 +904,52 @@ function listaDeItens(p, chave) {
 
     div.appendChild(texto);
 
+    let datas = null;
     if (eAtb) {
-      const data = document.createElement("input");
-      data.className = "data"; data.type = "date"; data.value = item.inicio || "";
-      data.title = "Início — é daqui que sai o D#";
-      const dia = document.createElement("span");
-      const pintar = () => {
-        const r = rotuloDia(item.inicio);
-        dia.textContent = r || "falta início";
-        dia.className = "dia" + (r ? "" : " falta");
+      div.classList.add("atb");
+      const campoData = (valor, dica) => {
+        const campo = document.createElement("input");
+        campo.className = "data"; campo.type = "date"; campo.value = valor || "";
+        campo.title = dica;
+        return campo;
       };
-      data.oninput = () => { item.inicio = data.value; pintar(); salvarAdiado(); renderFolhasAdiado(); };
+      const rotulo = palavra => {
+        const s = document.createElement("span");
+        s.className = "rot"; s.textContent = palavra;
+        return s;
+      };
+      const inicio = campoData(item.inicio, "Início — é daqui que sai o D#");
+      const fim = campoData(item.fim, "Último dia do antimicrobiano — marque quando estiver definido");
+      const dia = document.createElement("span");
+      const final = document.createElement("span");
+      const pintar = () => {
+        const e = estadoDoAtb(item);
+        dia.textContent = e.rotulo || "falta início";
+        dia.className = "dia" + (e.rotulo ? "" : " falta");
+        final.textContent = e.erro || (e.ultimo ? "último dia" : e.encerrado ? "encerrado"
+                                       : e.diaFinal ? "até " + e.diaFinal : "");
+        final.className = "dia" + (e.erro ? " falta" : e.ultimo ? " ultimo" : " fim");
+        div.classList.toggle("encerrado", e.encerrado);
+      };
+      inicio.oninput = () => { item.inicio = inicio.value; pintar(); salvarAdiado(); renderFolhasAdiado(); };
+      fim.oninput = () => { item.fim = fim.value; pintar(); salvarAdiado(); renderFolhasAdiado(); };
+
+      /* Data escrita junto do nome ("Ceftriaxona 26/08 até 02/09") vai para os
+         campos — só para os vazios: preenchida à mão, ela manda. Lida ao SAIR
+         do campo, não a cada tecla: digitando "até 1/10", o "1/1" do meio do
+         caminho já é uma data válida e viraria o fim errado. */
+      texto.onchange = () => {
+        const lido = lerDatasDoAtb(texto.value, item);
+        if (!lido) return;
+        item.texto = texto.value = lido.texto;
+        if (lido.inicio) item.inicio = inicio.value = lido.inicio;
+        if (lido.fim) item.fim = fim.value = lido.fim;
+        pintar(); salvar(); resumo(); renderFolhasAdiado();
+      };
       pintar();
-      div.append(data, dia);
+      datas = document.createElement("div");
+      datas.className = "datas";
+      datas.append(rotulo("início"), inicio, dia, rotulo("fim"), fim, final);
     } else {
       const risco = document.createElement("button");
       risco.className = "mini" + (item.suspenso ? " on" : "");
@@ -808,7 +957,7 @@ function listaDeItens(p, chave) {
       risco.title = "Marcar como suspensa: fica riscada, mas continua legível";
       risco.onclick = () => {
         item.suspenso = !item.suspenso;
-        salvar(); render();
+        salvar(); if (fichaAberta) renderFicha(); else render();
       };
       div.appendChild(risco);
     }
@@ -816,8 +965,9 @@ function listaDeItens(p, chave) {
     const tirar = document.createElement("button");
     tirar.className = "mini";
     tirar.textContent = "✕";
-    tirar.onclick = () => { p[chave].splice(indice, 1); salvar(); render(); };
+    tirar.onclick = () => { p[chave].splice(indice, 1); salvar(); if (fichaAberta) renderFicha(); else render(); };
     div.appendChild(tirar);
+    if (datas) div.appendChild(datas);
 
     caixa.appendChild(div);
   });
@@ -826,8 +976,8 @@ function listaDeItens(p, chave) {
   mais.className = "add";
   mais.textContent = eAtb ? "+ antimicrobiano" : "+ medicação";
   mais.onclick = () => {
-    p[chave].push(eAtb ? { texto: "", inicio: "" } : { texto: "", suspenso: false });
-    salvar(); render();
+    p[chave].push(eAtb ? { texto: "", inicio: "", fim: "" } : { texto: "", suspenso: false });
+    salvar(); if (fichaAberta) renderFicha(); else render();
   };
   caixa.appendChild(mais);
   return caixa;
@@ -837,6 +987,20 @@ function crescer(area) {
   area.style.height = "auto";
   area.style.height = Math.max(26, area.scrollHeight) + "px";
 }
+function crescerItem(area) {
+  area.style.height = "auto";
+  area.style.height = area.scrollHeight + "px";
+}
+/* Com a grade do tamanho da janela, mudar a janela muda onde o texto quebra:
+   as caixas são medidas de novo, senão ficariam cortadas ou com sobra. */
+let relogioJanela = null;
+window.addEventListener("resize", () => {
+  clearTimeout(relogioJanela);
+  relogioJanela = setTimeout(() => {
+    document.querySelectorAll("#corpo textarea.campo").forEach(crescer);
+    document.querySelectorAll("#corpo .item .txt, #ficha .item .txt").forEach(crescerItem);
+  }, 150);
+});
 
 let relogio = null;
 function salvarAdiado() {
@@ -934,7 +1098,7 @@ const LARGURA_MAXIMA = [6, 32, 34, 34, 34, 20, 42, 30];
 
 function massaDaColuna(p) {
   const meds = (p.medicacoes || []).map(m => m.texto || "").join(" ");
-  const atbs = (p.atbs || []).map(a => a.texto || "").join(" ");
+  const atbs = (p.atbs || []).map(a => (a.texto || "") + (a.fim ? " · até 00/00" : "")).join(" ");
   return [0,
           (p.nome || "").length + meds.length + 14,
           (p.problemas || "").length,
@@ -1186,8 +1350,7 @@ function linhaImpressa(p) {
   const atbs = document.createElement("td");
   (p.atbs || []).filter(a => (a.texto || "").trim()).forEach((a, i) => {
     if (i) atbs.append(document.createElement("br"));
-    const dia = rotuloDia(a.inicio);
-    atbs.append(txt(a.texto + (dia ? " " + dia : " (falta data de início)")));
+    atbs.append(atbImpresso(a));
   });
   celulas[5] = atbs;
 
@@ -1199,6 +1362,22 @@ function linhaImpressa(p) {
   // visíveis; a íntegra continua na tela.
   tr.querySelectorAll("td").forEach(envolver);
   return tr;
+}
+
+/* No papel a data de fim vai por extenso ("até 02/09"): "D3/7" se lê de dois
+   jeitos quando o serviço conta do D0. Encerrado sai riscado e legível, como
+   a medicação suspensa. */
+function atbImpresso(a) {
+  const e = estadoDoAtb(a);
+  const trecho = document.createElement("span");
+  let texto = a.texto + " " + (e.rotulo || "(falta data de início)");
+  if (e.erro) texto += " (confira a data de fim)";
+  else if (e.encerrado) { texto = a.texto + " — encerrado " + e.fim; trecho.className = "susp"; }
+  else if (e.ultimo) texto += " · ÚLTIMO DIA";
+  else if (e.fim) texto += " · até " + e.fim;
+  trecho.textContent = texto;
+  if (e.ultimo) trecho.style.fontWeight = "700";
+  return trecho;
 }
 
 function envolver(td) {
@@ -1299,6 +1478,10 @@ function resumo() {
   const partes = [n + " paciente(s)"];
   if (semData) partes.push(semData + " sem data de internação (DIH não calcula)");
   if (atbSemData) partes.push(atbSemData + " antimicrobiano(s) sem data de início");
+  const ultimoDia = dados.pacientes.filter(p => (p.atbs || []).some(
+    a => (a.texto || "").trim() && estadoDoAtb(a).ultimo));
+  if (ultimoDia.length)
+    partes.push("último dia de ATB hoje: " + ultimoDia.map(p => p.leito || p.nome || "sem leito").join(", "));
   let quando = null;
   try { quando = localStorage.getItem(CHAVE_BACKUP); } catch (e) {}
   const dica = document.getElementById("dica");
@@ -1351,6 +1534,7 @@ function aviso(texto) {
    com espaço para escrever. Uma coisa não substitui a outra: quem passa
    visita abre a ficha do seu leito e vai para o próximo. */
 let fichaAberta = null;
+let fichaDesenhada = null;
 
 function abrirFicha(id) {
   fichaAberta = id;
@@ -1358,6 +1542,7 @@ function abrirFicha(id) {
 }
 function fecharFicha() {
   fichaAberta = null;
+  fichaDesenhada = null;
   document.getElementById("ficha").hidden = true;
   salvar(); render();
 }
@@ -1428,7 +1613,12 @@ function renderFicha() {
   const p = dados.pacientes.find(x => x.id === fichaAberta);
   if (!p) { alvo.hidden = true; return; }
   alvo.hidden = false;
+  // Tirar ou pôr um item redesenha a ficha; sem isto ela pulava para o topo.
+  // Outro paciente começa do topo.
+  const rolagem = fichaDesenhada === p.id ? alvo.scrollTop : 0;
+  fichaDesenhada = p.id;
   alvo.textContent = "";
+  requestAnimationFrame(() => { alvo.scrollTop = rolagem; });
 
   const papel = document.createElement("div");
   papel.className = "papel";
@@ -1462,7 +1652,7 @@ function renderFicha() {
   conteudo.appendChild(blocoFicha("Tratamento",
     rotuloSolto("Medicações — o botão riscar marca a suspensa, sem apagar"),
     listaDeItens(p, "medicacoes"),
-    rotuloSolto("Antimicrobianos — preencha a data de início e o D# aparece sozinho"),
+    rotuloSolto("Antimicrobianos — com a data de início o D# aparece sozinho; marque o fim quando estiver definido"),
     listaDeItens(p, "atbs")));
 
   conteudo.appendChild(blocoFicha("Exames",
@@ -1738,8 +1928,21 @@ function blocoColar(p) {
   acoes.hidden = true;
 
   let lidas = [];
-  const atualizar = () => {
+  /* O que foi escolhido no seletor, por linha. Antes a escolha chamava a
+     leitura de novo, que devolvia o destino adivinhado: o seletor voltava
+     sozinho e não dava para mudar nada. Agora a escolha fica guardada e
+     sobrevive a mais texto colado; só o Limpar a esquece. */
+  const escolhas = new Map();
+  const ler = () => {
     lidas = lerColagem(area.value, !(p.nome || "").trim());
+    lidas.forEach(item => {
+      if (!escolhas.has(item.texto)) return;
+      item.destino = escolhas.get(item.texto);
+      item.solta = false;
+    });
+    atualizar();
+  };
+  const atualizar = () => {
     previa.textContent = "";
     previa.hidden = acoes.hidden = !lidas.length;
     if (!lidas.length) return;
@@ -1761,7 +1964,12 @@ function blocoColar(p) {
       hint.className = "hint";
       if (item.rotulo) hint.textContent = "rótulo — manda as linhas seguintes para lá";
       else if (item.solta) hint.textContent = "não reconheci; guardei em Hoje";
-      if (item.destino === "atb" || item.destino === "internacao") {
+      if (item.destino === "atb") {
+        const lido = lerDatasDoAtb(item.texto);
+        hint.textContent = !lido ? "sem data no texto"
+          : [lido.inicio ? "início lido: " + dataCurta(lido.inicio) : "sem data de início",
+             lido.fim ? "fim lido: " + dataCurta(lido.fim) : ""].filter(Boolean).join(" · ");
+      } else if (item.destino === "internacao") {
         const achado = acharDataNoTexto(item.texto);
         hint.textContent = achado
           ? "data lida: " + achado.iso.split("-").reverse().slice(0, 2).join("/")
@@ -1777,7 +1985,12 @@ function blocoColar(p) {
         if (d[0] === item.destino) op.selected = true;
         seletor.appendChild(op);
       });
-      seletor.onchange = () => { item.destino = seletor.value; atualizar(); };
+      seletor.onchange = () => {
+        item.destino = seletor.value;
+        item.solta = false;            // conferida: deixa de ser "não reconheci"
+        escolhas.set(item.texto, seletor.value);
+        atualizar();
+      };
       td2.appendChild(seletor);
 
       tr.append(td1, td2);
@@ -1795,10 +2008,10 @@ function blocoColar(p) {
     area.style.height = "auto";
     area.style.height = Math.min(260, Math.max(58, area.scrollHeight + 2)) + "px";
   };
-  area.oninput = () => { crescerColagem(); atualizar(); };
-  area.onpaste = () => setTimeout(() => { crescerColagem(); atualizar(); }, 0);
+  area.oninput = () => { crescerColagem(); ler(); };
+  area.onpaste = () => setTimeout(() => { crescerColagem(); ler(); }, 0);
 
-  limpar.onclick = () => { area.value = ""; crescerColagem(); atualizar(); area.focus(); };
+  limpar.onclick = () => { area.value = ""; escolhas.clear(); crescerColagem(); ler(); area.focus(); };
 
   aplicar.onclick = () => {
     const por = destino => lidas.filter(x => x.destino === destino).map(x => x.texto);
@@ -1821,9 +2034,10 @@ function blocoColar(p) {
       p.medicacoes.push({ texto: linha, suspenso: false });
     });
     por("atb").forEach(linha => {
-      const achado = acharDataNoTexto(linha);
+      const lido = lerDatasDoAtb(linha);
       p.atbs = p.atbs || [];
-      p.atbs.push({ texto: achado ? achado.texto : linha, inicio: achado ? achado.iso : "" });
+      p.atbs.push({ texto: lido ? lido.texto : linha, inicio: lido ? lido.inicio : "",
+                    fim: lido ? lido.fim : "" });
     });
     ["exames", "problemas", "caso", "hoje", "pendencias"].forEach(campo => {
       const novas = por(campo);
@@ -1837,7 +2051,7 @@ function blocoColar(p) {
   };
 
   caixa.append(explica, area, previa, acoes);
-  atualizar();
+  ler();
   return caixa;
 }
 
@@ -2316,11 +2530,21 @@ window.addEventListener("unhandledrejection", e =>
    chutada. */
 function medirBarra() {
   const barra = document.querySelector(".barra");
+  const dica = document.getElementById("dica");
   if (barra) {
     document.documentElement.style.setProperty("--altura-barra", barra.offsetHeight + "px");
+    // O título das colunas gruda embaixo das duas; a faixa muda de altura
+    // conforme o recado, por isso é observada e não só medida no resize.
+    document.documentElement.style.setProperty("--altura-topo",
+      barra.offsetHeight + (dica ? dica.offsetHeight : 0) + "px");
   }
 }
 window.addEventListener("resize", medirBarra);
+if (window.ResizeObserver) {
+  const observador = new ResizeObserver(medirBarra);
+  observador.observe(document.querySelector(".barra"));
+  observador.observe(document.getElementById("dica"));
+}
 medirBarra();
 
 /* Sair de um painel nao pode depender de achar o botao. Clique no fundo
